@@ -113,6 +113,12 @@ Safety/Guard             optional bounds/lock-screen guards (disabled by default
 ## Known limits (honest list)
 
 - Apps reading raw input / `GetAsyncKeyState` (games, some hotkey systems) can't see posted messages.
+- Modifier-key accelerators (`ctrl+s`, `ctrl+f`, etc.) posted via `press_key` don't always
+  fire: posted `WM_KEYDOWN` doesn't update `GetKeyState`, which is what most apps'
+  accelerator tables check for the modifier. Fixing this properly would mean calling
+  `SendInput`/`keybd_event` to set real OS-level key state — exactly the hardware input
+  pipeline this tool exists to avoid touching. Single keys and most non-modifier shortcuts
+  are unaffected.
 - A `WM_LBUTTONDOWN` can still make an app self-activate (rare).
 - `PrintWindow` fails on some hardware-accelerated apps → falls back to visible-region capture.
 - UIA `SetValue` append can briefly foreground some apps (disable via `AllowUiaTextFallback: false`).

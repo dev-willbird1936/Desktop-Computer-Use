@@ -67,7 +67,8 @@ async function load() {
 }
 async function save() {
   for (const [key] of TOGGLES) current[key] = document.getElementById(key).checked;
-  current.PostActionDelayMs = parseInt(document.getElementById('PostActionDelayMs').value) || 150;
+  const parsedDelay = parseInt(document.getElementById('PostActionDelayMs').value);
+  current.PostActionDelayMs = Number.isNaN(parsedDelay) ? 150 : parsedDelay;
   const r = await fetch('/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(current)});
   document.getElementById('status').textContent = r.ok ? ' ✓ saved' : ' save failed';
   setTimeout(() => document.getElementById('status').textContent = '', 2500);
@@ -103,6 +104,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != "/settings":
             return self._send(404, b"not found", "text/plain")
+        # A plain form/fetch POST from some other page open in the same browser can still
+        # be sent cross-origin (same-origin policy blocks reading the response, not sending
+        # the request) — reject anything not claiming to come from this server's own origin,
+        # so an unrelated page can't silently flip these safety toggles while this is running.
+        origin = self.headers.get("Origin", "")
+        if origin and origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
+            return self._send(403, b'{"ok":false,"error":"bad origin"}', "application/json")
         try:
             data = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             clean = {k: (int(data.get(k, DEFAULTS[k])) if k == "PostActionDelayMs"

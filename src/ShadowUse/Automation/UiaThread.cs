@@ -45,8 +45,8 @@ public sealed class UiaThread : IDisposable
         {
             try
             {
-                // CoInitialize as STA
-                Thread.CurrentThread.SetApartmentState(ApartmentState.STA);
+                // Apartment state is already set to STA below (before Start()); setting it
+                // again here from within the thread itself is redundant.
                 ready.Set();
                 foreach (var item in _queue.GetConsumingEnumerable())
                     item.Execute();

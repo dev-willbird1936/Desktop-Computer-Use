@@ -5,6 +5,8 @@
 import json, os, subprocess, sys, time, base64
 
 EXE = os.environ.get("DCU_EXE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "publish", "dcu.exe"))
+TMP_DIR = "C:/tmp"
+os.makedirs(TMP_DIR, exist_ok=True)
 
 class Mcp:
     def __init__(self):
@@ -25,6 +27,8 @@ class Mcp:
         self._send({"jsonrpc": "2.0", "method": method})
     def tool(self, name, args=None):
         r = self.call("tools/call", {"name": name, "arguments": args or {}})
+        if "error" in r:
+            return {"error": r["error"].get("message", str(r["error"]))}
         content = r.get("result", {}).get("content", [])
         text = content[0]["text"] if content else "{}"
         try: return json.loads(text)
@@ -38,7 +42,7 @@ m.notify("notifications/initialized")
 def snapshot(shot=False, tag=None):
     r = m.tool("get_app_state", {"app": "chrome", "include_screenshot": shot})
     if shot and r.get("screenshot_png_base64") and tag:
-        open(f"C:/tmp/{tag}.png", "wb").write(base64.b64decode(r["screenshot_png_base64"]))
+        open(f"{TMP_DIR}/{tag}.png", "wb").write(base64.b64decode(r["screenshot_png_base64"]))
     return r
 
 DISMISS = ["reject", "decline", "without accepting", "no thanks", "maybe later", "not now"]

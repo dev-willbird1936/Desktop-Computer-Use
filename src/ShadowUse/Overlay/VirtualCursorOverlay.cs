@@ -138,7 +138,8 @@ internal sealed class VirtualCursorOverlay : IDisposable
             // critically-damped-ish spring toward target
             float dx = _target.X - _pos.X, dy = _target.Y - _pos.Y;
             float dist = MathF.Sqrt(dx * dx + dy * dy);
-            if (dist < 1.5f)
+            bool arrived = dist < 1.5f;
+            if (arrived)
             {
                 _pos = _target;
                 if (_pulseOnArrive && _pulseRadius < 0) { _pulseRadius = 4; _pulseOnArrive = false; }
@@ -153,9 +154,15 @@ internal sealed class VirtualCursorOverlay : IDisposable
             if (_pulseRadius >= 0)
             {
                 _pulseRadius += 140 * dt;
-                if (_pulseRadius > CursorSize * 1.2f) { _pulseRadius = -1; _animTimer.Stop(); }
+                if (_pulseRadius > CursorSize * 1.2f) _pulseRadius = -1;
             }
             Render();
+
+            // Only stop once truly settled — a pulse finishing while a newer AnimateTo
+            // call is still mid-flight to a different target must not freeze the cursor
+            // there until some later call happens to restart the timer.
+            if (arrived && _pulseRadius < 0)
+                _animTimer.Stop();
         }
 
         private void Render()

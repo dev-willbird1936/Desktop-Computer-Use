@@ -41,9 +41,12 @@ internal static class Program
 
                     Workflow: list_apps → get_app_state(app) → act by element id
                     (click/type_text/press_key/scroll/set_value/drag) → re-snapshot.
-                    Coordinate clicks are guarded: if the window moved since the last
-                    snapshot, you must re-snapshot first. Use wait_for to poll without
-                    snapshots, execute_sequence to batch steps server-side.
+                    Element ids are tied to the snapshot that produced them: if an id is
+                    unknown, or its element has since vanished, re-run get_app_state.
+                    Raw x,y coordinate clicks are NOT guarded against the window having
+                    moved unless the EnableBoundsGuard setting is turned on (off by
+                    default) — prefer element ids when precision matters. Use wait_for
+                    to poll without snapshots, execute_sequence to batch steps server-side.
                     """;
             })
             .WithStdioServerTransport()

@@ -17,7 +17,7 @@ namespace ShadowUse.Capture;
 internal static class ScreenshotService
 {
     /// <summary>Capture a window as PNG bytes. Returns null if all methods fail.</summary>
-    public static byte[]? CaptureWindow(IntPtr hwnd, Snapshot? annotateWith = null, int maxWidth = 1280)
+    public static byte[]? CaptureWindow(IntPtr hwnd, IReadOnlyList<ElementInfo>? annotateWith = null, int maxWidth = 1280)
     {
         if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
             return null;
@@ -27,7 +27,7 @@ internal static class ScreenshotService
 
         try
         {
-            if (annotateWith != null && annotateWith.Elements.Count > 0)
+            if (annotateWith != null && annotateWith.Count > 0)
                 Annotate(bmp, annotateWith, rect);
 
             if (bmp.Width > maxWidth)
@@ -57,18 +57,27 @@ internal static class ScreenshotService
         catch { return null; }
     }
 
+    /// <summary>PrintWindow sends WM_PRINT/WM_PRINTCLIENT to hwnd and blocks until it's
+    /// handled — a hung target's message queue can wedge this call indefinitely. Run it on
+    /// a worker with a timeout so a hung app degrades to CopyFromScreen instead of hanging
+    /// the whole get_app_state call. If it does time out, the worker thread is abandoned
+    /// still blocked inside PrintWindow (bounded degradation is better than an unbounded hang).</summary>
     private static Bitmap? TryPrintWindow(IntPtr hwnd, NativeMethods.RECT rect)
     {
         try
         {
-            var bmp = new Bitmap(rect.Width, rect.Height, PixelFormat.Format32bppArgb);
-            using var g = Graphics.FromImage(bmp);
-            var hdc = g.GetHdc();
-            bool ok;
-            try { ok = NativeMethods.PrintWindow(hwnd, hdc, NativeMethods.PW_RENDERFULLCONTENT); }
-            finally { g.ReleaseHdc(hdc); }
-            if (!ok || IsBlank(bmp)) { bmp.Dispose(); return null; }
-            return bmp;
+            var task = Task.Run(() =>
+            {
+                var bmp = new Bitmap(rect.Width, rect.Height, PixelFormat.Format32bppArgb);
+                using var g = Graphics.FromImage(bmp);
+                var hdc = g.GetHdc();
+                bool ok;
+                try { ok = NativeMethods.PrintWindow(hwnd, hdc, NativeMethods.PW_RENDERFULLCONTENT); }
+                finally { g.ReleaseHdc(hdc); }
+                if (!ok || IsBlank(bmp)) { bmp.Dispose(); return null; }
+                return bmp;
+            });
+            return task.Wait(TimeSpan.FromSeconds(2)) ? task.Result : null;
         }
         catch { return null; }
     }
@@ -96,7 +105,7 @@ internal static class ScreenshotService
         return true;
     }
 
-    private static void Annotate(Bitmap bmp, Snapshot snap, NativeMethods.RECT windowRect)
+    private static void Annotate(Bitmap bmp, IReadOnlyList<ElementInfo> elements, NativeMethods.RECT windowRect)
     {
         using var g = Graphics.FromImage(bmp);
         g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -107,7 +116,7 @@ internal static class ScreenshotService
             Color.FromArgb(255, 186, 85, 211), Color.FromArgb(255, 255, 140, 0), Color.FromArgb(255, 0, 206, 209),
         };
         int i = 0;
-        foreach (var el in snap.Elements)
+        foreach (var el in elements)
         {
             var color = palette[i++ % palette.Length];
             int x = el.ScreenX - windowRect.Left, y = el.ScreenY - windowRect.Top;

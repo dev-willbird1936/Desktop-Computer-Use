@@ -1,5 +1,6 @@
 // Copyright (c) 2026 dev-willbird1936 — https://github.com/dev-willbird1936/Desktop-Computer-Use
 // Licensed under MIT. See LICENSE. Keep this notice when redistributing.
+using System.Text.RegularExpressions;
 using Interop.UIAutomationClient;
 using ShadowUse.Native;
 
@@ -95,37 +96,37 @@ public sealed class BackgroundInput
     }
 
     /// <summary>Deepest child of hwnd containing the screen point (Chrome_RenderWidgetHostHWND,
-    /// edit controls, etc.), falling back to hwnd itself.</summary>
+    /// edit controls, etc.), falling back to hwnd itself. Uses RealChildWindowFromPoint — a
+    /// purely local hit test walking hwnd's own child tree — rather than WindowFromPoint, which
+    /// is a global z-order query: if hwnd is occluded by an unrelated window at that screen
+    /// point (the exact background/occluded-window scenario this tool exists for),
+    /// WindowFromPoint returns the occluder, not our target's child. RealChildWindowFromPoint
+    /// never looks outside hwnd's own subtree, so occlusion by other windows can't affect it.</summary>
     private static IntPtr ChildWindowFromPoint(IntPtr hwnd, int screenX, int screenY)
     {
-        var pt = new NativeMethods.POINT { X = screenX, Y = screenY };
-        var child = NativeMethods.WindowFromPoint(pt);
-        // WindowFromPoint can return a window from another process/thread — only accept
-        // descendants of our target
-        if (child != IntPtr.Zero && (child == hwnd || IsDescendant(hwnd, child)))
-            return child;
-        return hwnd;
-    }
-
-    private static bool IsDescendant(IntPtr ancestor, IntPtr hwnd)
-    {
-        var cur = hwnd;
-        for (int i = 0; i < 32 && cur != IntPtr.Zero; i++)
+        var current = hwnd;
+        for (int depth = 0; depth < 32; depth++)
         {
-            if (cur == ancestor) return true;
-            cur = NativeMethods.GetParent(cur);
+            var pt = new NativeMethods.POINT { X = screenX, Y = screenY };
+            if (!NativeMethods.ScreenToClient(current, ref pt)) break;
+            var child = NativeMethods.RealChildWindowFromPoint(current, pt);
+            if (child == IntPtr.Zero || child == current || !NativeMethods.IsWindow(child)) break;
+            current = child;
         }
-        return false;
+        return current;
     }
 
     /// <summary>Resolve the child HWND that should receive input — the element's own
-    /// native window handle when it has one (edit controls, Electron sub-windows),
-    /// else the window under the point, else the main window.</summary>
-    public IntPtr ResolveInputHwnd(IntPtr hwnd, ElementInfo? info)
+    /// native window handle when it has one (edit controls, Electron sub-windows), else
+    /// null so the caller falls back to a point-based lookup (ChildWindowFromPoint).
+    /// Chromium DOM elements report NativeWindowHandle == 0 (UIA only populates it for
+    /// hwnd-backed fragment roots), so returning the top-level hwnd here — instead of
+    /// null — used to skip the point-based descent entirely for every such element.</summary>
+    public IntPtr? ResolveInputHwnd(IntPtr hwnd, ElementInfo? info)
     {
         if (info?.NativeWindowHandle is int h and > 0 && h != hwnd.ToInt32())
             return (IntPtr)h;
-        return hwnd;
+        return null;
     }
 
     // ---------- Typing ----------
@@ -144,7 +145,14 @@ public sealed class BackgroundInput
         var editHwnd = await _uia.InvokeAsync(() => FindTextEntryHwnd(hwnd), ct).ConfigureAwait(false);
         if (editHwnd != IntPtr.Zero)
         {
-            NativeMethods.SendMessageW(editHwnd, NativeMethods.EM_SETSEL, (IntPtr)(-1), (IntPtr)(-1));
+            // (-1,-1) is NOT "caret to end" — that's EM_SETSEL's documented "deselect in
+            // place" case, which leaves the caret wherever it already was (offset 0 on a
+            // control we never focused), so EM_REPLACESEL inserted at the START instead of
+            // appending. WM_GETTEXTLENGTH must be sent as a message (not GetWindowTextLength,
+            // which skips messaging entirely for windows outside our process and returns a
+            // stale/zero cached caption length) to find the real end offset first.
+            int len = (int)NativeMethods.SendMessageW(editHwnd, NativeMethods.WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero);
+            NativeMethods.SendMessageW(editHwnd, NativeMethods.EM_SETSEL, (IntPtr)len, (IntPtr)len);
             var r = NativeMethods.SendMessageW(editHwnd, NativeMethods.EM_REPLACESEL, (IntPtr)1, text);
             if (r == IntPtr.Zero) // EM_REPLACESEL returns 0 on success in most controls; some return non-zero
                 return new InputResult(true, "em_replacesel", $"hwnd=0x{editHwnd.ToInt64():X}");
@@ -303,8 +311,12 @@ public sealed class BackgroundInput
 
     private static (int vk, int ch, int[] mods) ParseKey(string key)
     {
+        if (string.IsNullOrEmpty(key)) throw new ArgumentException("key must not be empty");
         var mods = new List<int>();
-        var parts = key.ToLowerInvariant().Split('+', '-');
+        // Split on '+'/'-' only when followed by another character, so a trailing lone
+        // '+' or '-' (e.g. "ctrl++" / "ctrl+-" — the zoom-in/zoom-out shortcuts) is kept
+        // as the literal key instead of being consumed as a separator with nothing after it.
+        var parts = Regex.Split(key.ToLowerInvariant(), "[+-](?=.)");
         foreach (var p in parts[..^1])
         {
             switch (p.Trim())
@@ -322,10 +334,27 @@ public sealed class BackgroundInput
             "space" => 0x20, "back" or "backspace" => 0x08, "delete" => 0x2E,
             "home" => 0x24, "end" => 0x23, "pageup" => 0x21, "pagedown" => 0x22,
             "up" => 0x26, "down" => 0x28, "left" => 0x25, "right" => 0x27,
-            _ when last.Length == 1 => char.ToUpperInvariant(last[0]),
+            _ when last.Length == 1 && char.IsLetterOrDigit(last[0]) => char.ToUpperInvariant(last[0]),
             _ when last.StartsWith('f') && int.TryParse(last[1..], out var f) && f is >= 1 and <= 12 => 0x6F + f,
             _ => 0
         };
+        // Punctuation single chars: char.ToUpperInvariant only makes sense for letters — it
+        // previously mapped '.' to VK_DELETE (0x2E), ',' to VK_SNAPSHOT, '\'' to VK_RIGHT, etc.
+        // (whatever virtual-key numeric value happened to equal the uppercased char code).
+        // VkKeyScanW maps a character to the actual key + shift state that produces it on
+        // the current keyboard layout.
+        if (vk == 0 && last.Length == 1 && !char.IsLetterOrDigit(last[0]))
+        {
+            short scan = NativeMethods.VkKeyScanW((ushort)last[0]);
+            if (scan != -1)
+            {
+                vk = scan & 0xFF;
+                int shiftState = (scan >> 8) & 0xFF;
+                if ((shiftState & 1) != 0 && !mods.Contains(NativeMethods.VK_SHIFT)) mods.Add(NativeMethods.VK_SHIFT);
+                if ((shiftState & 2) != 0 && !mods.Contains(NativeMethods.VK_CONTROL)) mods.Add(NativeMethods.VK_CONTROL);
+                if ((shiftState & 4) != 0 && !mods.Contains(NativeMethods.VK_MENU)) mods.Add(NativeMethods.VK_MENU);
+            }
+        }
         int ch = mods.Count == 0 && last.Length == 1 && vk != 0 ? last[0] : 0;
         if (vk == 0) throw new ArgumentException($"Unknown key: '{key}'");
         return (vk, ch, mods.ToArray());
@@ -384,7 +413,10 @@ public sealed class BackgroundInput
             var target = info?.NativeWindowHandle is int nh and > 0 ? (IntPtr)nh : ChildWindowFromPoint(hwnd, x, y);
             int notches = Math.Max(1, (int)Math.Ceiling(pages * 3)); // ~3 notches per "page"
             uint msg = direction is "left" or "right" ? (uint)NativeMethods.WM_MOUSEHWHEEL : (uint)NativeMethods.WM_MOUSEWHEEL;
-            int sign = direction is "up" or "left" ? 1 : -1;
+            // Vertical: positive delta = wheel tilted away from the user = scroll up.
+            // Horizontal: positive delta = wheel tilted right = scroll right (not left —
+            // this was inverted before, so "left" scrolled right and vice versa).
+            int sign = direction is "up" or "right" ? 1 : -1;
             var screenLParam = NativeMethods.MakeLParam(x, y);
             for (int i = 0; i < notches; i++)
             {
@@ -397,28 +429,35 @@ public sealed class BackgroundInput
 
     // ---------- Drag ----------
 
-    /// <summary>Message-based drag with interpolated move steps. Real cursor untouched.</summary>
+    /// <summary>Message-based drag with interpolated move steps. Real cursor untouched.
+    /// Resolves the actual child window under the drag's start point once, occlusion-safe
+    /// (same descent as ClickAtAsync), and posts the whole down/move/up stream to that one
+    /// window — re-descending per step could switch recipients mid-drag.</summary>
     public Task<InputResult> DragAsync(IntPtr hwnd, int fromX, int fromY, int toX, int toY, CancellationToken ct)
         => Task.Run(() =>
         {
+            var target = ChildWindowFromPoint(hwnd, fromX, fromY);
+            if (!NativeMethods.IsWindow(target))
+                return new InputResult(false, "none", "target window no longer exists");
+
             var pt = new NativeMethods.POINT { X = fromX, Y = fromY };
-            NativeMethods.ScreenToClient(hwnd, ref pt);
+            NativeMethods.ScreenToClient(target, ref pt);
             var start = NativeMethods.MakeLParam(pt.X, pt.Y);
-            NativeMethods.PostMessageW(hwnd, NativeMethods.WM_MOUSEMOVE, IntPtr.Zero, start);
-            NativeMethods.PostMessageW(hwnd, NativeMethods.WM_LBUTTONDOWN, (IntPtr)NativeMethods.MK_LBUTTON, start);
+            NativeMethods.PostMessageW(target, NativeMethods.WM_MOUSEMOVE, IntPtr.Zero, start);
+            NativeMethods.PostMessageW(target, NativeMethods.WM_LBUTTONDOWN, (IntPtr)NativeMethods.MK_LBUTTON, start);
             const int steps = 12;
             for (int i = 1; i <= steps; i++)
             {
                 int ix = fromX + (toX - fromX) * i / steps;
                 int iy = fromY + (toY - fromY) * i / steps;
                 var mp = new NativeMethods.POINT { X = ix, Y = iy };
-                NativeMethods.ScreenToClient(hwnd, ref mp);
-                NativeMethods.PostMessageW(hwnd, NativeMethods.WM_MOUSEMOVE, (IntPtr)NativeMethods.MK_LBUTTON, NativeMethods.MakeLParam(mp.X, mp.Y));
+                NativeMethods.ScreenToClient(target, ref mp);
+                NativeMethods.PostMessageW(target, NativeMethods.WM_MOUSEMOVE, (IntPtr)NativeMethods.MK_LBUTTON, NativeMethods.MakeLParam(mp.X, mp.Y));
                 Thread.Sleep(20);
             }
             var end = new NativeMethods.POINT { X = toX, Y = toY };
-            NativeMethods.ScreenToClient(hwnd, ref end);
-            NativeMethods.PostMessageW(hwnd, NativeMethods.WM_LBUTTONUP, IntPtr.Zero, NativeMethods.MakeLParam(end.X, end.Y));
+            NativeMethods.ScreenToClient(target, ref end);
+            NativeMethods.PostMessageW(target, NativeMethods.WM_LBUTTONUP, IntPtr.Zero, NativeMethods.MakeLParam(end.X, end.Y));
             return new InputResult(true, "postmessage_drag", $"({fromX},{fromY})→({toX},{toY})");
         }, ct);
 

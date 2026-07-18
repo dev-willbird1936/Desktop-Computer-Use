@@ -64,7 +64,11 @@ public sealed class ComputerUseTools
     {
         var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
         var snap = await _uia.SnapshotAsync(target, maxNodes: Math.Max(100, max_elements * 3), ct: ct).ConfigureAwait(false);
-        byte[]? img = include_screenshot ? ScreenshotService.CaptureWindow(target.Hwnd, snap) : null;
+        // Truncate for THIS response only — never mutate the cached snapshot's own element
+        // list; click/scroll/set_value re-resolve element ids against that same cached
+        // object later and would lose access to anything trimmed here.
+        var limited = snap.Elements.Count > max_elements ? snap.Elements.Take(max_elements).ToList() : snap.Elements;
+        byte[]? img = include_screenshot ? ScreenshotService.CaptureWindow(target.Hwnd, limited) : null;
         return new
         {
             revision = snap.Revision,
@@ -73,7 +77,7 @@ public sealed class ComputerUseTools
             title = snap.Title,
             bounds = new { snap.Bounds.Left, snap.Bounds.Top, snap.Bounds.Right, snap.Bounds.Bottom },
             foreground_free = true,
-            elements = snap.Elements.Select(e => new
+            elements = limited.Select(e => new
             {
                 id = e.Id, type = e.ControlType, name = e.Name, automation_id = e.AutomationId,
                 x = e.X, y = e.Y, w = e.Width, h = e.Height, actions = e.Actions,
@@ -100,57 +104,70 @@ public sealed class ComputerUseTools
             var err = DesktopError();
             if (err != null) return Error(err);
             var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
-
-            var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
-            var snap = _uia.GetSnapshot(app) ?? await _uia.SnapshotAsync(target, ct: ct).ConfigureAwait(false);
-            ElementInfo? info = null;
-            Interop.UIAutomationClient.IUIAutomationElement? element = null;
-
-            if (element_id != null)
+            try
             {
-                info = snap.Elements.FirstOrDefault(e => e.Id == element_id);
-                if (info == null)
-                    return Error($"Unknown element id '{element_id}' in snapshot r{snap.Revision}. Call get_app_state for fresh ids.");
-                element = await _uia.ResolveElementAsync(target.Hwnd, info, ct).ConfigureAwait(false);
-            }
-            else
-            {
-                if (x == null || y == null) return Error("Provide element_id or both x and y.");
-                if (snap != null && _settings.EnableBoundsGuard)
+                var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
+                var cachedSnap = _uia.GetSnapshot(target);
+                ElementInfo? info = null;
+                Interop.UIAutomationClient.IUIAutomationElement? element = null;
+                Snapshot snap;
+
+                if (element_id != null)
                 {
-                    err = Guard.CheckBounds(snap, target.Hwnd);
-                    if (err != null) return Error(err);
+                    // A cache miss here can never be recovered by taking a fresh snapshot —
+                    // element ids are minted from a monotonic counter, so a brand-new snapshot
+                    // can never contain an id from an older one. Fail clearly instead of
+                    // silently walking the tree just to report a confusing "unknown id".
+                    if (cachedSnap == null)
+                        return Error("No cached snapshot for this app (or the window changed since it was taken). Call get_app_state first.");
+                    snap = cachedSnap;
+                    info = snap.Elements.FirstOrDefault(e => e.Id == element_id);
+                    if (info == null)
+                        return Error($"Unknown element id '{element_id}' in snapshot r{snap.Revision}. Call get_app_state for fresh ids.");
+                    element = await _uia.ResolveElementAsync(target.Hwnd, info, ct).ConfigureAwait(false);
+                    if (element == null)
+                        return Error($"Element '{element_id}' no longer exists at its last known position. Re-run get_app_state.");
                 }
+                else
+                {
+                    if (x == null || y == null) return Error("Provide element_id or both x and y.");
+                    snap = cachedSnap ?? await _uia.SnapshotAsync(target, ct: ct).ConfigureAwait(false);
+                    if (_settings.EnableBoundsGuard)
+                    {
+                        err = Guard.CheckBounds(snap, target.Hwnd);
+                        if (err != null) return Error(err);
+                    }
+                }
+
+                var btn = button.ToLowerInvariant() switch
+                {
+                    "right" => BackgroundInput.MouseButton.Right,
+                    "middle" => BackgroundInput.MouseButton.Middle,
+                    _ => BackgroundInput.MouseButton.Left,
+                };
+
+                // Cosmetic virtual cursor — show the user where the action lands
+                int vx = x ?? info!.ScreenX + info.Width / 2;
+                int vy = y ?? info!.ScreenY + info.Height / 2;
+                Ghost(vx, vy, pulse: true);
+                await Task.Delay(140, ct).ConfigureAwait(false); // let the pulse be visible
+
+                BackgroundInput.InputResult result = element_id != null
+                    ? await _input.ClickElementAsync(target.Hwnd, element, info, btn, click_count, ct).ConfigureAwait(false)
+                    : await _input.ClickAtAsync(target.Hwnd, x!.Value, y!.Value, btn, click_count, ct).ConfigureAwait(false);
+
+                if (!result.Success) return Error($"Click failed: {result.Detail}");
+
+                await Task.Delay(_settings.PostActionDelayMs, ct).ConfigureAwait(false);
+                var after = await _uia.SnapshotAsync(target, ct: ct).ConfigureAwait(false);
+                return new
+                {
+                    ok = true, method = result.Method, revision = after.Revision,
+                    changed_elements = DeltaOf(snap, after),
+                    hint = "Snapshot refreshed. If the UI changed a lot, call get_app_state for full detail."
+                };
             }
-
-            var btn = button.ToLowerInvariant() switch
-            {
-                "right" => BackgroundInput.MouseButton.Right,
-                "middle" => BackgroundInput.MouseButton.Middle,
-                _ => BackgroundInput.MouseButton.Left,
-            };
-
-            // Cosmetic virtual cursor — show the user where the action lands
-            int vx = x ?? info!.ScreenX + info.Width / 2;
-            int vy = y ?? info!.ScreenY + info.Height / 2;
-            Ghost(vx, vy, pulse: true);
-            await Task.Delay(140, ct).ConfigureAwait(false); // let the pulse be visible
-
-            BackgroundInput.InputResult result = element_id != null
-                ? await _input.ClickElementAsync(target.Hwnd, element, info, btn, click_count, ct).ConfigureAwait(false)
-                : await _input.ClickAtAsync(target.Hwnd, x!.Value, y!.Value, btn, click_count, ct).ConfigureAwait(false);
-
-            if (!result.Success) return Error($"Click failed: {result.Detail}");
-
-            await Task.Delay(_settings.PostActionDelayMs, ct).ConfigureAwait(false);
-            focusGuard?.Restore();
-            var after = await _uia.SnapshotAsync(target, ct: ct).ConfigureAwait(false);
-            return new
-            {
-                ok = true, method = result.Method, revision = after.Revision,
-                changed_elements = DeltaOf(snap, after),
-                hint = "Snapshot refreshed. If the UI changed a lot, call get_app_state for full detail."
-            };
+            finally { focusGuard?.Restore(); }
         }
         finally { _mutationLock.Release(); }
     }
@@ -168,12 +185,15 @@ public sealed class ComputerUseTools
             var err = DesktopError();
             if (err != null) return Error(err);
             var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
-            var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
-            var result = await _input.TypeTextAsync(target.Hwnd, text, ct, allow_uia_fallback ?? _settings.AllowUiaTextFallback).ConfigureAwait(false);
-            await Task.Delay(_settings.PostActionDelayMs, ct).ConfigureAwait(false);
-            focusGuard?.Restore();
-            var after = await _uia.SnapshotAsync(target, ct: ct).ConfigureAwait(false);
-            return new { ok = result.Success, method = result.Method, revision = after.Revision };
+            try
+            {
+                var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
+                var result = await _input.TypeTextAsync(target.Hwnd, text, ct, allow_uia_fallback ?? _settings.AllowUiaTextFallback).ConfigureAwait(false);
+                await Task.Delay(_settings.PostActionDelayMs, ct).ConfigureAwait(false);
+                var after = await _uia.SnapshotAsync(target, ct: ct).ConfigureAwait(false);
+                return new { ok = result.Success, method = result.Method, revision = after.Revision };
+            }
+            finally { focusGuard?.Restore(); }
         }
         finally { _mutationLock.Release(); }
     }
@@ -190,10 +210,13 @@ public sealed class ComputerUseTools
             var err = DesktopError();
             if (err != null) return Error(err);
             var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
-            var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
-            var result = await _input.PressKeyAsync(target.Hwnd, key, ct).ConfigureAwait(false);
-            focusGuard?.Restore();
-            return new { ok = result.Success, method = result.Method };
+            try
+            {
+                var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
+                var result = await _input.PressKeyAsync(target.Hwnd, key, ct).ConfigureAwait(false);
+                return new { ok = result.Success, method = result.Method };
+            }
+            finally { focusGuard?.Restore(); }
         }
         finally { _mutationLock.Release(); }
     }
@@ -212,18 +235,21 @@ public sealed class ComputerUseTools
             var err = DesktopError();
             if (err != null) return Error(err);
             var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
-            var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
-            var snap = _uia.GetSnapshot(app);
-            ElementInfo? info = null;
-            Interop.UIAutomationClient.IUIAutomationElement? element = null;
-            if (element_id != null && snap != null)
+            try
             {
-                info = snap.Elements.FirstOrDefault(e => e.Id == element_id);
-                if (info != null) element = await _uia.ResolveElementAsync(target.Hwnd, info, ct).ConfigureAwait(false);
+                var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
+                var snap = _uia.GetSnapshot(target);
+                ElementInfo? info = null;
+                Interop.UIAutomationClient.IUIAutomationElement? element = null;
+                if (element_id != null && snap != null)
+                {
+                    info = snap.Elements.FirstOrDefault(e => e.Id == element_id);
+                    if (info != null) element = await _uia.ResolveElementAsync(target.Hwnd, info, ct).ConfigureAwait(false);
+                }
+                var result = await _input.ScrollAsync(target.Hwnd, element, info, direction, pages, ct).ConfigureAwait(false);
+                return new { ok = result.Success, method = result.Method, detail = result.Detail };
             }
-            var result = await _input.ScrollAsync(target.Hwnd, element, info, direction, pages, ct).ConfigureAwait(false);
-            focusGuard?.Restore();
-            return new { ok = result.Success, method = result.Method, detail = result.Detail };
+            finally { focusGuard?.Restore(); }
         }
         finally { _mutationLock.Release(); }
     }
@@ -243,19 +269,22 @@ public sealed class ComputerUseTools
             var err = DesktopError();
             if (err != null) return Error(err);
             var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
-            var snap = _uia.GetSnapshot(app);
+            var snap = _uia.GetSnapshot(target);
             if (snap != null && _settings.EnableBoundsGuard)
             {
                 err = Guard.CheckBounds(snap, target.Hwnd);
                 if (err != null) return Error(err);
             }
             var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
-            Ghost(from_x, from_y);
-            await Task.Delay(_settings.PostActionDelayMs, ct).ConfigureAwait(false);
-            Ghost(to_x, to_y);
-            var result = await _input.DragAsync(target.Hwnd, from_x, from_y, to_x, to_y, ct).ConfigureAwait(false);
-            focusGuard?.Restore();
-            return new { ok = result.Success, method = result.Method };
+            try
+            {
+                Ghost(from_x, from_y);
+                await Task.Delay(_settings.PostActionDelayMs, ct).ConfigureAwait(false);
+                Ghost(to_x, to_y);
+                var result = await _input.DragAsync(target.Hwnd, from_x, from_y, to_x, to_y, ct).ConfigureAwait(false);
+                return new { ok = result.Success, method = result.Method };
+            }
+            finally { focusGuard?.Restore(); }
         }
         finally { _mutationLock.Release(); }
     }
@@ -273,18 +302,23 @@ public sealed class ComputerUseTools
             var err = DesktopError();
             if (err != null) return Error(err);
             var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
-            var snap = _uia.GetSnapshot(app)
-                ?? throw new InvalidOperationException("No snapshot; call get_app_state first.");
+            var snap = _uia.GetSnapshot(target);
+            if (snap == null)
+                return Error("No cached snapshot for this app (or the window changed since it was taken). Call get_app_state first.");
             var info = snap.Elements.FirstOrDefault(e => e.Id == element_id);
             if (info == null)
                 return Error($"Unknown element id '{element_id}' in snapshot r{snap.Revision}. Call get_app_state for fresh ids.");
-            var element = await _uia.ResolveElementAsync(target.Hwnd, info, ct).ConfigureAwait(false)
-                ?? throw new InvalidOperationException($"Element '{element_id}' no longer exists. Re-run get_app_state.");
+            var element = await _uia.ResolveElementAsync(target.Hwnd, info, ct).ConfigureAwait(false);
+            if (element == null)
+                return Error($"Element '{element_id}' no longer exists. Re-run get_app_state.");
             var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
-            var result = await _input.SetValueAsync(element, value, ct).ConfigureAwait(false);
-            focusGuard?.Restore();
-            if (!result.Success) return Error(result.Detail);
-            return new { ok = true, method = result.Method };
+            try
+            {
+                var result = await _input.SetValueAsync(element, value, ct).ConfigureAwait(false);
+                if (!result.Success) return Error(result.Detail);
+                return new { ok = true, method = result.Method };
+            }
+            finally { focusGuard?.Restore(); }
         }
         finally { _mutationLock.Release(); }
     }
@@ -362,8 +396,7 @@ public sealed class ComputerUseTools
             }
             catch (Exception ex) { r = Error(ex.Message); }
             results.Add(new { step = i, tool, result = r });
-            bool failed = r.GetType().GetProperty("error") != null;
-            if (failed && stop_on_error)
+            if (HasFailed(r) && stop_on_error)
                 return new { ok = false, stopped_at = i, results };
         }
         return new { ok = true, steps_run = i, results };
@@ -395,11 +428,25 @@ public sealed class ComputerUseTools
 
     private static object Error(string message) => new { error = message };
 
+    /// <summary>True if a tool result represents failure — either the {error:...} shape,
+    /// or an explicit ok:false (e.g. wait_for's timeout return, which has no "error" field).</summary>
+    private static bool HasFailed(object r)
+    {
+        var t = r.GetType();
+        if (t.GetProperty("error") != null) return true;
+        var okProp = t.GetProperty("ok");
+        return okProp?.GetValue(r) is bool ok && !ok;
+    }
+
     private static object DeltaOf(Snapshot? before, Snapshot after)
     {
         if (before == null) return new { note = "no prior snapshot" };
-        var b = before.Elements.Select(e => e.Id + e.Name).ToHashSet();
-        var a = after.Elements.Select(e => e.Id + e.Name).ToHashSet();
+        // Session element ids are minted fresh on every snapshot (monotonic counter), so
+        // comparing by Id would always report the whole tree as added+removed. RuntimeId is
+        // UIA's own stable identity for "the same element across snapshots while it exists".
+        static string Key(ElementInfo e) => string.Join(",", e.RuntimeId);
+        var b = before.Elements.Select(Key).ToHashSet();
+        var a = after.Elements.Select(Key).ToHashSet();
         return new { added = a.Except(b).Count(), removed = b.Except(a).Count(), total = after.Elements.Count };
     }
 

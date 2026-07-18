@@ -47,15 +47,27 @@ internal sealed class FocusGuard
     /// <summary>Restore foreground/focus/caret if the action moved them. No-op if nothing changed.</summary>
     public void Restore()
     {
-        if (_foreground == IntPtr.Zero) return;
+        if (_foreground == IntPtr.Zero || !NativeMethods.IsWindow(_foreground)) return;
         if (NativeMethods.GetForegroundWindow() == _foreground) return; // user's focus untouched
 
         uint cur = NativeMethods.GetCurrentThreadId();
-        bool attached = false;
+
+        // SetForegroundWindow only succeeds for a thread attached to the thread that
+        // CURRENTLY owns foreground (the "thief" that just grabbed it) — attaching to
+        // _threadId (the ORIGINAL pre-action foreground thread, i.e. the one we're
+        // restoring TO, not the one that took it) grants no standing for that call.
+        // SetFocus separately needs the calling thread attached to the window's OWNING
+        // thread, which is _threadId. Both attaches are needed; they serve two different calls.
+        var thief = NativeMethods.GetForegroundWindow();
+        uint thiefTid = thief != IntPtr.Zero ? NativeMethods.GetWindowThreadProcessId(thief, out _) : 0;
+
+        bool attachedThief = false, attachedOriginal = false;
         try
         {
-            if (_threadId != 0 && _threadId != cur)
-                attached = NativeMethods.AttachThreadInput(cur, _threadId, true);
+            if (thiefTid != 0 && thiefTid != cur)
+                attachedThief = NativeMethods.AttachThreadInput(cur, thiefTid, true);
+            if (_threadId != 0 && _threadId != cur && _threadId != thiefTid)
+                attachedOriginal = NativeMethods.AttachThreadInput(cur, _threadId, true);
 
             NativeMethods.SetForegroundWindow(_foreground);
             var focusTarget = _focus != IntPtr.Zero ? _focus : _caret;
@@ -64,8 +76,8 @@ internal sealed class FocusGuard
         }
         finally
         {
-            if (attached)
-                NativeMethods.AttachThreadInput(cur, _threadId, false);
+            if (attachedOriginal) NativeMethods.AttachThreadInput(cur, _threadId, false);
+            if (attachedThief) NativeMethods.AttachThreadInput(cur, thiefTid, false);
         }
     }
 }

@@ -89,9 +89,10 @@ public sealed class UiaService
         AppTarget? match = null;
         if (int.TryParse(app, out var pid))
             match = apps.FirstOrDefault(a => a.Process.Id == pid);
+        var appNoExeSuffix = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app[..^4] : app;
         match ??= apps.FirstOrDefault(a =>
                 a.Process.ProcessName.Equals(app, StringComparison.OrdinalIgnoreCase)
-             || a.Process.ProcessName.Equals(app.TrimEnd(".exe".ToCharArray()), StringComparison.OrdinalIgnoreCase))
+             || a.Process.ProcessName.Equals(appNoExeSuffix, StringComparison.OrdinalIgnoreCase))
             ?? apps.FirstOrDefault(a => a.Title.Equals(app, StringComparison.OrdinalIgnoreCase))
             ?? apps.FirstOrDefault(a => a.Title.Contains(app, StringComparison.OrdinalIgnoreCase))
             ?? apps.FirstOrDefault(a => a.Process.ProcessName.Contains(app, StringComparison.OrdinalIgnoreCase));
@@ -102,6 +103,8 @@ public sealed class UiaService
 
     // ---------- Snapshot ----------
 
+    // Ids must match ControlTypeName below exactly (they previously drifted, silently
+    // swapping in the wrong control types — e.g. Image instead of Hyperlink).
     private static readonly HashSet<int> InteractiveTypes =
     [
         50000, // Button
@@ -109,26 +112,26 @@ public sealed class UiaService
         50002, // CheckBox
         50003, // ComboBox
         50004, // Edit
-        50006, // Hyperlink
-        50008, // ListItem
-        50010, // Menu
-        50011, // MenuBar
-        50012, // MenuItem
-        50013, // ProgressBar
+        50005, // Hyperlink
+        50007, // ListItem
+        50009, // Menu
+        50010, // MenuBar
+        50011, // MenuItem
+        50012, // ProgressBar
+        50013, // RadioButton
         50015, // Slider
         50016, // Spinner
-        50017, // RadioButton (actually 50013? kept defensive)
         50018, // Tab
         50019, // TabItem
-        50022, // Tree
-        50023, // TreeItem
+        50023, // Tree
+        50024, // TreeItem
         50025, // Custom
         50026, // Group
-        50030, // DataGrid
-        50031, // DataItem
-        50033, // Document
-        50035, // SplitButton
-        50037, // Pane
+        50028, // DataGrid
+        50029, // DataItem
+        50030, // Document
+        50031, // SplitButton
+        50033, // Pane
     ];
 
     public Task<Snapshot> SnapshotAsync(AppTarget app, int maxNodes = 1200, int maxDepth = 48, int textLimit = 500, CancellationToken ct = default)
@@ -216,15 +219,19 @@ public sealed class UiaService
             Walk(root, 0);
             snap.TreeText = sb.ToString();
             if (snap.TreeText.Length > textLimit * 40) snap.TreeText = snap.TreeText[..(textLimit * 40)] + "\n... (truncated)";
-            _snapshots[app.Process.ProcessName] = snap;
+            // Keyed by pid only — process name can collide (two Chrome windows are two
+            // processes sharing the name "chrome"), pid never does.
             _snapshots[app.Process.Id.ToString()] = snap;
             return snap;
         }, ct);
 
-    public Snapshot? GetSnapshot(string app)
-        => _snapshots.TryGetValue(app, out var s) ? s
-         : int.TryParse(app, out _) && _snapshots.TryGetValue(app, out var s2) ? s2
-         : _snapshots.FirstOrDefault(kv => kv.Key.Equals(app, StringComparison.OrdinalIgnoreCase)).Value;
+    /// <summary>Cached snapshot for a resolved target, or null if there isn't one yet or it's
+    /// stale (the process's main window handle changed since the snapshot was taken).</summary>
+    public Snapshot? GetSnapshot(AppTarget target)
+    {
+        if (!_snapshots.TryGetValue(target.Process.Id.ToString(), out var s)) return null;
+        return s.Hwnd == target.Hwnd ? s : null;
+    }
 
     // ---------- Element resolution ----------
 

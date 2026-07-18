@@ -6,6 +6,8 @@ posted window messages). No focus steal, no real cursor movement, no typing."""
 import json, os, subprocess, time, base64
 
 EXE = os.environ.get("DCU_EXE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "publish", "dcu.exe"))
+TMP_DIR = "C:/tmp"
+os.makedirs(TMP_DIR, exist_ok=True)
 
 class Mcp:
     def __init__(self):
@@ -24,6 +26,8 @@ class Mcp:
     def notify(self, method): self._send({"jsonrpc": "2.0", "method": method})
     def tool(self, name, args=None):
         r = self.call("tools/call", {"name": name, "arguments": args or {}})
+        if "error" in r:
+            return {"error": r["error"].get("message", str(r["error"]))}
         c = r.get("result", {}).get("content", [])
         t = c[0]["text"] if c else "{}"
         try: return json.loads(t)
@@ -39,7 +43,7 @@ APP = "chrome"
 def snap(shot=False, tag=None, max_elements=900):
     r = m.tool("get_app_state", {"app": APP, "include_screenshot": shot, "max_elements": max_elements})
     if shot and r.get("screenshot_png_base64") and tag:
-        open(f"C:/tmp/{tag}.png", "wb").write(base64.b64decode(r["screenshot_png_base64"]))
+        open(f"{TMP_DIR}/{tag}.png", "wb").write(base64.b64decode(r["screenshot_png_base64"]))
     return r
 
 def click(eid):
@@ -47,11 +51,14 @@ def click(eid):
     return r
 
 DISMISS = ["accept", "got it", "agree", "continue", "no thanks", "not now", "dismiss"]
+# Buttons matching DISMISS but ALSO looking like they open a cookie-preferences/settings
+# panel (rather than directly accepting/dismissing the banner) should be skipped.
+NOT_A_PLAIN_DISMISS = ["preferences", "manage cookies", "customi", "settings"]
 def dismiss(pg):
     for e in pg.get("elements", []):
         n = (e.get("name") or "").lower()
         if e.get("type") in ("Button", "Hyperlink") and e["w"] < 700 and any(w in n for w in DISMISS):
-            if any(bad in n for bad in ["accept all cookies preferences"]): continue
+            if any(bad in n for bad in NOT_A_PLAIN_DISMISS): continue
             print("  dismiss:", e["name"][:60])
             click(e["id"]); time.sleep(1.5)
             return True

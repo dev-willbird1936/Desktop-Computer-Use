@@ -13,6 +13,7 @@ public static partial class NativeMethods
     public const int WM_KEYUP = 0x0101;
     public const int WM_CHAR = 0x0102;
     public const int WM_SETTEXT = 0x000C;
+    public const int WM_GETTEXTLENGTH = 0x000E;
     public const int WM_MOUSEMOVE = 0x0200;
     public const int WM_LBUTTONDOWN = 0x0201;
     public const int WM_LBUTTONUP = 0x0202;
@@ -208,6 +209,12 @@ public static partial class NativeMethods
 
     [System.Runtime.InteropServices.LibraryImport("user32.dll")]
     internal static partial IntPtr GetParent(IntPtr hWnd);
+
+    /// <summary>Local (non-z-order) hit test: which of hWndParent's own children is at the
+    /// given client point. Unlike WindowFromPoint, this never looks at unrelated windows
+    /// drawn on top, so it works correctly even when hWndParent is occluded.</summary>
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    internal static partial IntPtr RealChildWindowFromPoint(IntPtr hWndParent, POINT ptParentClientCoords);
 }
 
 public static partial class NativeMethods
