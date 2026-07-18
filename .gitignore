@@ -1,0 +1,14 @@
+# reference clones and binaries (not ours to redistribute)
+other-repos/
+
+# build output
+bin/
+obj/
+out/
+
+# settings with possible local overrides
+settings.json
+
+# OS junk
+Thumbs.db
+.DS_Store
