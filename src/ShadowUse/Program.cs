@@ -30,7 +30,7 @@ internal static class Program
         builder.Services
             .AddMcpServer(o =>
             {
-                o.ServerInfo = new() { Name = "shadow-use", Version = "0.1.0" };
+                o.ServerInfo = new() { Name = "dcu", Version = "0.1.0" };
                 o.ServerInstructions = """
                     Background computer control for Windows. All actions are focus-free:
                     UIA patterns or posted window messages — the real cursor never moves,
