@@ -50,7 +50,11 @@ internal static class Program
             .WithToolsFromAssembly();
 
         var host = builder.Build();
-        host.Services.GetRequiredService<VirtualCursorOverlay>(); // warm the overlay thread
+        // Capture cleanup services BEFORE RunAsync — the host disposes the service
+        // provider on exit, so resolving them in finally would throw ObjectDisposedException
+        // and mask a clean shutdown with exit code 1.
+        var overlay = host.Services.GetRequiredService<VirtualCursorOverlay>(); // warms the overlay thread
+        var uia = host.Services.GetRequiredService<UiaThread>();
         try
         {
             await host.RunAsync().ConfigureAwait(false);
@@ -58,8 +62,8 @@ internal static class Program
         }
         finally
         {
-            host.Services.GetRequiredService<VirtualCursorOverlay>().Dispose();
-            host.Services.GetRequiredService<UiaThread>().Dispose();
+            try { overlay.Dispose(); } catch { /* best-effort cleanup */ }
+            try { uia.Dispose(); } catch { /* best-effort cleanup */ }
         }
     }
 
