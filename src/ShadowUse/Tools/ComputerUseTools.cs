@@ -108,8 +108,9 @@ public sealed class ComputerUseTools
 
             if (element_id != null)
             {
-                info = snap.Elements.FirstOrDefault(e => e.Id == element_id)
-                    ?? throw new InvalidOperationException($"Unknown element id '{element_id}' in snapshot r{snap.Revision}. Re-run get_app_state.");
+                info = snap.Elements.FirstOrDefault(e => e.Id == element_id);
+                if (info == null)
+                    return Error($"Unknown element id '{element_id}' in snapshot r{snap.Revision}. Call get_app_state for fresh ids.");
                 element = await _uia.ResolveElementAsync(target.Hwnd, info, ct).ConfigureAwait(false);
             }
             else
@@ -274,8 +275,9 @@ public sealed class ComputerUseTools
             var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
             var snap = _uia.GetSnapshot(app)
                 ?? throw new InvalidOperationException("No snapshot; call get_app_state first.");
-            var info = snap.Elements.FirstOrDefault(e => e.Id == element_id)
-                ?? throw new InvalidOperationException($"Unknown element id '{element_id}'. Re-run get_app_state.");
+            var info = snap.Elements.FirstOrDefault(e => e.Id == element_id);
+            if (info == null)
+                return Error($"Unknown element id '{element_id}' in snapshot r{snap.Revision}. Call get_app_state for fresh ids.");
             var element = await _uia.ResolveElementAsync(target.Hwnd, info, ct).ConfigureAwait(false)
                 ?? throw new InvalidOperationException($"Element '{element_id}' no longer exists. Re-run get_app_state.");
             var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;

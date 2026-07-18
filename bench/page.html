@@ -1,0 +1,80 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>dcu-bench</title>
+<style>
+  body { font: 13px monospace; background:#111; color:#eee; margin:10px; }
+  .grid button { width:44px; height:34px; margin:2px; }
+  #pad { width:300px; height:120px; background:#222; border:2px solid #555; margin:8px 0; }
+  textarea { width:340px; height:70px; }
+  #dragSrc { width:80px; height:30px; background:#284; display:inline-block; text-align:center; line-height:30px; }
+  #dropZone { width:160px; height:60px; border:2px dashed #48f; display:inline-block; vertical-align:top; line-height:60px; text-align:center; }
+  #log { background:#000; color:#6f6; height:200px; overflow-y:scroll; white-space:pre-wrap; }
+  canvas { border:1px solid #888; }
+  .spacer { height: 3000px; }
+</style></head><body>
+<div id="top">DCU BENCH PAGE</div>
+<div class="grid" id="grid"></div>
+<div id="pad" role="button" aria-label="mouse-event pad area for button coverage tests">mouse-event pad area for button coverage tests</div>
+<textarea id="t1" aria-label="bench textarea"></textarea>
+<div>
+  <div id="dragSrc" draggable="true" aria-label="DRAGME source element for drag and drop testing">DRAGME source element for drag drop</div>
+  <div id="dropZone" aria-label="DROP HERE target zone for drag and drop testing">DROP HERE target zone for drops</div>
+</div>
+<div id="dups">
+  <button class="dup">Add</button><button class="dup">Add</button><button class="dup">Add</button>
+  <button class="dup">Add</button><button class="dup">Add</button>
+</div>
+<canvas id="cv" width="200" height="120"></canvas>
+<button id="mutate">Mutate DOM</button>
+<pre id="log"></pre>
+<div class="spacer">SPACER FOR SCROLL</div>
+<script>
+let log = [];
+function rec(s) {
+  log.push(s);
+  document.getElementById('log').textContent = log.join("\n");
+  document.title = "dcu-bench | " + s;
+}
+// 25-button click grid
+const grid = document.getElementById('grid');
+for (let i = 0; i < 25; i++) {
+  const b = document.createElement('button');
+  b.textContent = 'B' + i;
+  b.addEventListener('click', () => rec('grid:' + i));
+  grid.appendChild(b);
+}
+// mouse pad: buttons + dblclick
+const pad = document.getElementById('pad');
+pad.addEventListener('mousedown', e => rec('down:' + e.button));
+pad.addEventListener('mouseup', e => rec('up:' + e.button));
+pad.addEventListener('dblclick', e => rec('dbl:' + e.button));
+pad.addEventListener('contextmenu', e => { e.preventDefault(); rec('ctx'); });
+// textarea marker
+document.getElementById('t1').addEventListener('input', e => rec('t1input:' + e.target.value.length));
+// focus bookkeeping (did the OS give this window focus?)
+let focusCount = 0;
+window.addEventListener('focus', () => { focusCount++; rec('focusEvents:' + focusCount); });
+// scroll tracker
+window.addEventListener('scroll', () => { document.title = 'dcu-bench | scrollY:' + Math.round(window.scrollY); });
+// html5 drag-drop
+const src = document.getElementById('dragSrc');
+const dz = document.getElementById('dropZone');
+src.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', 'DRAGME'); rec('dragstart'); });
+dz.addEventListener('dragover', e => e.preventDefault());
+dz.addEventListener('drop', e => { e.preventDefault(); rec('drop:' + e.dataTransfer.getData('text/plain')); });
+// canvas click coords (no a11y children inside canvas)
+document.getElementById('cv').addEventListener('click', e => {
+  const r = e.target.getBoundingClientRect();
+  rec('canvas:' + Math.round(e.clientX - r.left) + ',' + Math.round(e.clientY - r.top));
+});
+// duplicates
+document.querySelectorAll('.dup').forEach((b, i) => b.addEventListener('click', () => rec('dup:' + i)));
+// mutate (staleness test)
+document.getElementById('mutate').addEventListener('click', () => {
+  const b = document.createElement('button');
+  b.textContent = 'NEW' + Math.floor(Math.random() * 1000);
+  b.addEventListener('click', () => rec('newbtn'));
+  document.getElementById('dups').appendChild(b);
+  rec('mutated');
+});
+rec('ready');
+</script></body></html>

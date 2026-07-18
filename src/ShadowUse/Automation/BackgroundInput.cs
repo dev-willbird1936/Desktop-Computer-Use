@@ -70,6 +70,8 @@ public sealed class BackgroundInput
         var target = inputHwnd ?? ChildWindowFromPoint(hwnd, screenX, screenY);
         return Task.Run(() =>
         {
+            if (!NativeMethods.IsWindow(target))
+                return new InputResult(false, "none", "target window no longer exists");
             var pt = new NativeMethods.POINT { X = screenX, Y = screenY };
             NativeMethods.ScreenToClient(target, ref pt);
             var lParam = NativeMethods.MakeLParam(pt.X, pt.Y);
@@ -131,8 +133,10 @@ public sealed class BackgroundInput
     /// <summary>
     /// Focus-free text entry cascade:
     /// 1. child edit HWND → EM_SETSEL(end) + EM_REPLACESEL (no focus needed)
-    /// 2. UIA ValuePattern.SetValue(append) — only if explicitly allowed (can foreground the app)
-    /// 3. WM_CHAR stream to the main window
+    /// 2. key-event stream (WM_KEYDOWN/WM_CHAR/WM_KEYUP) to a render-widget child
+    ///    (Chromium/Electron — fires real DOM input events, unlike UIA SetValue)
+    /// 3. UIA ValuePattern.SetValue(append) — only if explicitly allowed (can foreground the app)
+    /// 4. WM_CHAR stream to the main window
     /// </summary>
     public async Task<InputResult> TypeTextAsync(IntPtr hwnd, string text, CancellationToken ct, bool allowUiaTextFallback = false)
     {
@@ -147,7 +151,37 @@ public sealed class BackgroundInput
             return new InputResult(true, "em_replacesel", $"hwnd=0x{editHwnd.ToInt64():X} (rc={r})");
         }
 
-        // Tier 2: UIA SetValue append (gated — observed to foreground some apps)
+        // Tier 2: key-event stream into a render widget (Chromium/Electron) — the DOM
+        // sees genuine key/input events, so web forms register the text
+        var renderHwnd = await _uia.InvokeAsync(() => FindRenderWidgetHwnd(hwnd), ct).ConfigureAwait(false);
+        if (renderHwnd != IntPtr.Zero)
+        {
+            await Task.Run(() =>
+            {
+                foreach (char c in text)
+                {
+                    short vk = NativeMethods.VkKeyScanW((ushort)c);
+                    if (vk != -1)
+                    {
+                        int key = vk & 0xFF;
+                        bool shift = (vk & 0x100) != 0;
+                        if (shift) NativeMethods.PostMessageW(renderHwnd, NativeMethods.WM_KEYDOWN, (IntPtr)NativeMethods.VK_SHIFT, IntPtr.Zero);
+                        NativeMethods.PostMessageW(renderHwnd, NativeMethods.WM_KEYDOWN, (IntPtr)key, IntPtr.Zero);
+                        NativeMethods.PostMessageW(renderHwnd, NativeMethods.WM_CHAR, (IntPtr)c, IntPtr.Zero);
+                        NativeMethods.PostMessageW(renderHwnd, NativeMethods.WM_KEYUP, (IntPtr)key, IntPtr.Zero);
+                        if (shift) NativeMethods.PostMessageW(renderHwnd, NativeMethods.WM_KEYUP, (IntPtr)NativeMethods.VK_SHIFT, IntPtr.Zero);
+                    }
+                    else
+                    {
+                        NativeMethods.PostMessageW(renderHwnd, NativeMethods.WM_CHAR, (IntPtr)c, IntPtr.Zero);
+                    }
+                    Thread.Sleep(4);
+                }
+            }, ct).ConfigureAwait(false);
+            return new InputResult(true, "render_widget_keys", $"hwnd=0x{renderHwnd.ToInt64():X}");
+        }
+
+        // Tier 3: UIA SetValue append (gated — observed to foreground some apps)
         if (allowUiaTextFallback)
         {
             var ok = await _uia.InvokeAsync(() =>
@@ -164,7 +198,7 @@ public sealed class BackgroundInput
             if (ok) return new InputResult(true, "uia_setvalue_append");
         }
 
-        // Tier 3: WM_CHAR stream to main window
+        // Tier 4: WM_CHAR stream to main window
         await Task.Run(() =>
         {
             foreach (char c in text)
@@ -174,6 +208,24 @@ public sealed class BackgroundInput
             }
         }, ct).ConfigureAwait(false);
         return new InputResult(true, "wm_char", $"{text.Length} chars");
+    }
+
+    /// <summary>Find a Chromium/Electron render-widget child window (the HWND that
+    /// actually receives keyboard input), if this is that kind of app.</summary>
+    private IntPtr FindRenderWidgetHwnd(IntPtr hwnd)
+    {
+        IntPtr found = IntPtr.Zero;
+        NativeMethods.EnumChildWindows(hwnd, (child, _) =>
+        {
+            var cls = NativeMethods.GetClassNameString(child);
+            if (cls.Contains("RenderWidgetHost", StringComparison.OrdinalIgnoreCase))
+            {
+                if (NativeMethods.IsWindowVisible(child)) { found = child; return false; }
+                if (found == IntPtr.Zero) found = child;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return found;
     }
 
     private IntPtr FindTextEntryHwnd(IntPtr hwnd)
@@ -281,23 +333,28 @@ public sealed class BackgroundInput
 
     // ---------- Scroll ----------
 
-    /// <summary>Scroll: UIA ScrollPattern first, WM_MOUSEWHEEL at element center as fallback.</summary>
+    private static readonly string[] ValidDirections = ["up", "down", "left", "right"];
+
+    /// <summary>Scroll: UIA ScrollPattern first, wheel messages as fallback.</summary>
     public async Task<InputResult> ScrollAsync(IntPtr hwnd, IUIAutomationElement? element, ElementInfo? info,
         string direction, double pages, CancellationToken ct)
     {
+        direction = direction.ToLowerInvariant();
+        if (!ValidDirections.Contains(direction))
+            return new InputResult(false, "none", $"direction must be up/down/left/right, got '{direction}'");
+
         if (element != null)
         {
             var viaPattern = await _uia.InvokeAsync(() =>
             {
                 if (element.GetCurrentPattern(UiaIds.ScrollPattern) is IUIAutomationScrollPattern sp)
                 {
-                    var (h, v) = direction.ToLowerInvariant() switch
+                    var (h, v) = direction switch
                     {
                         "down" => (ScrollAmount.ScrollAmount_NoAmount, ScrollAmount.ScrollAmount_LargeIncrement),
                         "up" => (ScrollAmount.ScrollAmount_NoAmount, ScrollAmount.ScrollAmount_LargeDecrement),
                         "right" => (ScrollAmount.ScrollAmount_LargeIncrement, ScrollAmount.ScrollAmount_NoAmount),
-                        "left" => (ScrollAmount.ScrollAmount_LargeDecrement, ScrollAmount.ScrollAmount_NoAmount),
-                        _ => throw new ArgumentException($"direction must be up/down/left/right, got '{direction}'")
+                        _ => (ScrollAmount.ScrollAmount_LargeDecrement, ScrollAmount.ScrollAmount_NoAmount),
                     };
                     int times = Math.Max(1, (int)Math.Ceiling(pages));
                     for (int i = 0; i < times; i++)
@@ -312,7 +369,9 @@ public sealed class BackgroundInput
             if (viaPattern) return new InputResult(true, "uia_scroll");
         }
 
-        // Fallback: wheel message at element center (or window center)
+        // Fallback: wheel messages at element center (or window center).
+        // WM_MOUSEWHEEL lParam is SCREEN coordinates (not client), and the message must
+        // reach the content window (render widget), not the top-level frame.
         int x = info != null ? info.ScreenX + info.Width / 2 : 0;
         int y = info != null ? info.ScreenY + info.Height / 2 : 0;
         if (info == null)
@@ -322,13 +381,17 @@ public sealed class BackgroundInput
         }
         return await Task.Run(() =>
         {
-            var pt = new NativeMethods.POINT { X = x, Y = y };
-            var target = info?.NativeWindowHandle is int nh and > 0 ? (IntPtr)nh : hwnd;
-            NativeMethods.ScreenToClient(target, ref pt);
-            int delta = (int)(NativeMethods.WHEEL_DELTA * pages) * (direction is "up" or "left" ? 1 : -1);
+            var target = info?.NativeWindowHandle is int nh and > 0 ? (IntPtr)nh : ChildWindowFromPoint(hwnd, x, y);
+            int notches = Math.Max(1, (int)Math.Ceiling(pages * 3)); // ~3 notches per "page"
             uint msg = direction is "left" or "right" ? (uint)NativeMethods.WM_MOUSEHWHEEL : (uint)NativeMethods.WM_MOUSEWHEEL;
-            NativeMethods.PostMessageW(target, msg, NativeMethods.WheelWParam(delta), NativeMethods.MakeLParam(x, y));
-            return new InputResult(true, "wm_wheel", $"{direction} {pages} pages");
+            int sign = direction is "up" or "left" ? 1 : -1;
+            var screenLParam = NativeMethods.MakeLParam(x, y);
+            for (int i = 0; i < notches; i++)
+            {
+                NativeMethods.PostMessageW(target, msg, NativeMethods.WheelWParam(NativeMethods.WHEEL_DELTA * sign), screenLParam);
+                Thread.Sleep(30);
+            }
+            return new InputResult(true, "wm_wheel", $"{direction} {pages} pages ({notches} notches)");
         }, ct).ConfigureAwait(false);
     }
 

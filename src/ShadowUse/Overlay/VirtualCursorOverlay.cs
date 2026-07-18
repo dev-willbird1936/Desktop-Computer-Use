@@ -70,10 +70,21 @@ internal sealed class VirtualCursorOverlay : IDisposable
             StartPosition = FormStartPosition.Manual;
             Size = new Size(CursorSize * 2, CursorSize * 2);
             TopMost = true;
-            // Click-through + per-pixel-alpha layered window
-            NativeMethods.SetWindowDisplayAffinity(Handle, NativeMethods.WDA_EXCLUDEFROMCAPTURE);
             _animTimer = new System.Windows.Forms.Timer { Interval = 16 }; // ~60fps
             _animTimer.Tick += (_, _) => Tick();
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ApplyCaptureExclusion();
+        }
+
+        private void ApplyCaptureExclusion()
+        {
+            // WDA_EXCLUDEFROMCAPTURE — ghost must not appear in screenshots/recordings
+            if (!NativeMethods.SetWindowDisplayAffinity(Handle, NativeMethods.WDA_EXCLUDEFROMCAPTURE))
+                System.Diagnostics.Debug.WriteLine($"ghost: SetWindowDisplayAffinity failed err={System.Runtime.InteropServices.Marshal.GetLastWin32Error()}");
         }
 
         protected override CreateParams CreateParams
@@ -95,7 +106,7 @@ internal sealed class VirtualCursorOverlay : IDisposable
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            NativeMethods.SetWindowDisplayAffinity(Handle, NativeMethods.WDA_EXCLUDEFROMCAPTURE);
+            ApplyCaptureExclusion();
             Visible = false; // start hidden; shown on first MoveTo
         }
 
@@ -198,6 +209,7 @@ internal sealed class VirtualCursorOverlay : IDisposable
                 };
                 if (!Visible && _visible)
                 {
+                    ApplyCaptureExclusion();
                     Visible = true;
                     NativeMethods.SetWindowPos(Handle, (IntPtr)(-1), dst.X, dst.Y, w, h,
                         (uint)(NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW));

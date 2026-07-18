@@ -245,3 +245,16 @@ public static partial class NativeMethods
         public RECT rcCaret;
     }
 }
+
+public static partial class NativeMethods
+{
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    internal static partial short VkKeyScanW(ushort ch);
+
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    internal static partial int GetWindowLongW(IntPtr hWnd, int nIndex);
+
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    internal static partial bool GetWindowDisplayAffinity(IntPtr hWnd, out uint lpdwAffinity);
+}
