@@ -1,3 +1,5 @@
+# Copyright (c) 2026 dev-willbird1936 — https://github.com/dev-willbird1936/Desktop-Computer-Use
+# Licensed under MIT. See LICENSE. Keep this notice when redistributing.
 # -*- coding: utf-8 -*-
 """DCU settings server: serves a tiny settings page, saves settings.json."""
 import json, os, webbrowser
@@ -6,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 PORT = 8737
 APPDATA_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "shadow-use")
 APPDATA_SETTINGS = os.path.join(APPDATA_DIR, "settings.json")
-EXE_SETTINGS = r"C:\SyncedProjects\Scripting\Windows-Computer-Use\publish\settings.json"
+EXE_SETTINGS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "publish", "settings.json")
 
 DEFAULTS = {
     "AllowUiaTextFallback": True,

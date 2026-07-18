@@ -1,3 +1,5 @@
+// Copyright (c) 2026 dev-willbird1936 — https://github.com/dev-willbird1936/Desktop-Computer-Use
+// Licensed under MIT. See LICENSE. Keep this notice when redistributing.
 namespace ShadowUse.Automation;
 
 /// <summary>UIA pattern/property IDs (numeric constants from the UIA COM API).</summary>

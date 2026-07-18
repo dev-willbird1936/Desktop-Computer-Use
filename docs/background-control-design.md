@@ -186,3 +186,7 @@ Secondary actions (UIA): Raise / Scroll Up/Down/Left/Right / Expand / Collapse.
 5. **Identity** = UIA runtimeId + AutomationId/Name/ControlType fallback;
    revision-stamped snapshots; bounds-changed guard before coordinate input.
 6. **Policy** = per-app approval, elevation/lock detection, Esc kill-switch.
+
+
+---
+*Documentation for Desktop-Computer-Use by [dev-willbird1936](https://github.com/dev-willbird1936/Desktop-Computer-Use) — MIT licensed.*

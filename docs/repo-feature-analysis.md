@@ -117,3 +117,7 @@ spawns), MCP over stdio. Implementation language: **C# / .NET** — official MCP
 C# SDK, best-in-class UIA COM interop (proven by mcp-windows), trivial P/Invoke
 for the message layer, WinRT OCR for free, single-file exe. The one thing we
 deliberately do NOT copy from mcp-windows: its focus-stealing activation.
+
+
+---
+*Documentation for Desktop-Computer-Use by [dev-willbird1936](https://github.com/dev-willbird1936/Desktop-Computer-Use) — MIT licensed.*

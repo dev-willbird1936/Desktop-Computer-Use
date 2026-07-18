@@ -14,6 +14,19 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <InvariantGlobalization>true</InvariantGlobalization>
     <Version>0.1.0</Version>
+
+    <!-- Attribution -->
+    <Authors>dev-willbird1936</Authors>
+    <Company>dev-willbird1936</Company>
+    <Copyright>Copyright (c) 2026 dev-willbird1936</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/dev-willbird1936/Desktop-Computer-Use</RepositoryUrl>
+
+    <!-- Release hardening: no debug symbols, no local build paths in the binary -->
+    <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <ContinuousIntegrationBuild Condition="'$(Configuration)' == 'Release'">true</ContinuousIntegrationBuild>
+    <EnableCompressionInSingleFile Condition="'$(Configuration)' == 'Release'">true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <ItemGroup>

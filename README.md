@@ -60,6 +60,7 @@ password fields included.
   "EnableBoundsGuard": false,
   "EnableDesktopCheck": false,
   "ShowVirtualCursor": true,
+  "EnableFocusGuard": true,
   "PostActionDelayMs": 150
 }
 ```
@@ -70,7 +71,10 @@ password fields included.
 | `EnableBoundsGuard` | `false` | Refuse coordinate input if the window moved since the last snapshot |
 | `EnableDesktopCheck` | `false` | Refuse to act on lock screen / secure desktop |
 | `ShowVirtualCursor` | `true` | Green ghost cursor during actions |
+| `EnableFocusGuard` | `true` | Restore your foreground window + caret after actions that grab them |
 | `PostActionDelayMs` | `150` | Settle time before the follow-up snapshot |
+
+A browser-based settings page is included: run `dcu-settings.bat`, toggle, save.
 
 ## Build & run
 
@@ -83,14 +87,14 @@ dotnet run -- --doctor  # diagnostics
 ### Wire into Claude Code
 
 ```bash
-claude mcp add shadow-use -- "C:\SyncedProjects\Scripting\Windows-Computer-Use\src\ShadowUse\bin\Debug\net10.0-windows10.0.22621.0\shadow-use.exe"
+claude mcp add dcu -- "C:\path\to\Desktop-Computer-Use\publish\dcu.exe"
 ```
 
 ### Wire into another MCP client (config.toml style)
 
 ```toml
-[mcp_servers.shadow-use]
-command = 'C:\SyncedProjects\Scripting\Windows-Computer-Use\src\ShadowUse\bin\Debug\net10.0-windows10.0.22621.0\shadow-use.exe'
+[mcp_servers.dcu]
+command = 'C:\path\to\Desktop-Computer-Use\publish\dcu.exe'
 ```
 
 ## Architecture
@@ -114,3 +118,10 @@ Safety/Guard             optional bounds/lock-screen guards (disabled by default
 - UIA `SetValue` append can briefly foreground some apps (disable via `AllowUiaTextFallback: false`).
 - Minimized windows can't be captured (no backing surface); restore them first.
 - Elevated (admin) targets can't be reached from a non-elevated shadow-use.
+
+---
+
+<p align="center">
+<b>Desktop-Computer-Use</b> — designed and built by <a href="https://github.com/dev-willbird1936">dev-willbird1936</a>.<br>
+MIT licensed. If you redistribute or rebrand, keep the LICENSE and NOTICE intact.
+</p>

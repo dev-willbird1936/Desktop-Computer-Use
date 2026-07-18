@@ -1,9 +1,11 @@
+# Copyright (c) 2026 dev-willbird1936 — https://github.com/dev-willbird1936/Desktop-Computer-Use
+# Licensed under MIT. See LICENSE. Keep this notice when redistributing.
 # -*- coding: utf-8 -*-
 """Build a PC on PCPartPicker using ONLY background mouse actions (UIA invoke /
 posted window messages). No focus steal, no real cursor movement, no typing."""
-import json, subprocess, time, base64
+import json, os, subprocess, time, base64
 
-EXE = r"C:\SyncedProjects\Scripting\Windows-Computer-Use\src\ShadowUse\bin\Debug\net10.0-windows10.0.22621.0\shadow-use.exe"
+EXE = os.environ.get("DCU_EXE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "publish", "dcu.exe"))
 
 class Mcp:
     def __init__(self):
