@@ -1,5 +1,6 @@
 // Copyright (c) 2026 dev-willbird1936 — https://github.com/dev-willbird1936/Desktop-Computer-Use
 // Licensed under MIT. See LICENSE. Keep this notice when redistributing.
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Interop.UIAutomationClient;
 using ShadowUse.Native;
@@ -15,11 +16,13 @@ namespace ShadowUse.Automation;
 public sealed class BackgroundInput
 {
     private readonly UiaThread _uia;
+    private readonly ConcurrentDictionary<IntPtr, AddressBarInput> _addressBarInputs = new();
     public BackgroundInput(UiaThread uia) => _uia = uia;
 
     public enum MouseButton { Left, Right, Middle }
 
     public sealed record InputResult(bool Success, string Method, string Detail = "");
+    private sealed record AddressBarInput(string? Text);
 
     // ---------- Click ----------
 
@@ -34,6 +37,8 @@ public sealed class BackgroundInput
             {
                 if (element.GetCurrentPattern(UiaIds.InvokePattern) is IUIAutomationInvokePattern invoke)
                 { invoke.Invoke(); return "uia_invoke"; }
+                if (element.GetCurrentPattern(UiaIds.ExpandCollapsePattern) is IUIAutomationExpandCollapsePattern expand)
+                { expand.Expand(); return "uia_expand"; }
                 if (element.GetCurrentPattern(UiaIds.SelectionItemPattern) is IUIAutomationSelectionItemPattern sel)
                 { sel.Select(); return "uia_select"; }
                 if (element.GetCurrentPattern(UiaIds.TogglePattern) is IUIAutomationTogglePattern tog)
@@ -141,6 +146,36 @@ public sealed class BackgroundInput
     /// </summary>
     public async Task<InputResult> TypeTextAsync(IntPtr hwnd, string text, CancellationToken ct, bool allowUiaTextFallback = false)
     {
+        // Ctrl+L establishes an explicit omnibox target. Chromium has separate native
+        // routing for its frame and page render widget, so a key stream aimed at the
+        // render widget cannot type into the omnibox selected by the frame accelerator.
+        // Replace the address value through UIA and verify the observable value instead.
+        if (_addressBarInputs.ContainsKey(hwnd))
+        {
+            var addressValue = await _uia.InvokeAsync(() =>
+            {
+                var address = FindChromiumAddressBar(hwnd);
+                if (address?.GetCurrentPattern(UiaIds.ValuePattern) is not IUIAutomationValuePattern value
+                    || value.CurrentIsReadOnly != 0)
+                    return (Found: false, Value: "");
+                value.SetValue(text);
+                return (Found: true, Value: value.CurrentValue ?? "");
+            }, ct).ConfigureAwait(false);
+            if (!addressValue.Found)
+            {
+                _addressBarInputs.TryRemove(hwnd, out _);
+                return new InputResult(false, "uia_address_value", "Chrome address bar disappeared before text entry");
+            }
+            if (!string.Equals(addressValue.Value, text, StringComparison.Ordinal))
+            {
+                _addressBarInputs.TryRemove(hwnd, out _);
+                return new InputResult(false, "uia_address_value",
+                    $"Chrome address bar did not accept the complete value ({addressValue.Value.Length}/{text.Length} characters)");
+            }
+            _addressBarInputs[hwnd] = new AddressBarInput(text);
+            return new InputResult(true, "uia_address_value", $"verified {text.Length} characters");
+        }
+
         // Tier 1: find a text-entry child HWND (edit/richtext/document) and EM_REPLACESEL into it
         var editHwnd = await _uia.InvokeAsync(() => FindTextEntryHwnd(hwnd), ct).ConfigureAwait(false);
         if (editHwnd != IntPtr.Zero)
@@ -288,25 +323,150 @@ public sealed class BackgroundInput
         return null;
     }
 
+    /// <summary>Find Chrome/Chromium's native omnibox accessibility element. The stable
+    /// view automation id is preferred so this also works when the accessible name is
+    /// localized; the English name is retained as a compatibility fallback.</summary>
+    private static IUIAutomationElement? FindChromiumAddressBar(IntPtr hwnd)
+    {
+        if (!NativeMethods.GetClassNameString(hwnd).Contains("Chrome_WidgetWin", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var uia = new CUIAutomation8();
+        var root = uia.ElementFromHandle(hwnd);
+        var edits = root.FindAll(
+            TreeScope.TreeScope_Descendants,
+            uia.CreatePropertyCondition(UiaIds.ControlTypeProperty, 50004)); // Edit
+        IUIAutomationElement? namedFallback = null;
+        for (int i = 0; i < edits.Length; i++)
+        {
+            var element = edits.GetElement(i);
+            try
+            {
+                if (element.CurrentAutomationId.Equals("view_1012", StringComparison.OrdinalIgnoreCase))
+                    return element;
+                if (element.CurrentName.Contains("Address and search bar", StringComparison.OrdinalIgnoreCase))
+                    namedFallback = element;
+            }
+            catch { /* element disappeared while walking */ }
+        }
+        return namedFallback;
+    }
+
     // ---------- Keys ----------
 
     /// <summary>Key press via posted WM_KEYDOWN/WM_KEYUP (+WM_CHAR for text keys). No focus steal.</summary>
-    public Task<InputResult> PressKeyAsync(IntPtr hwnd, string key, CancellationToken ct)
+    public async Task<InputResult> PressKeyAsync(IntPtr hwnd, string key, CancellationToken ct)
     {
         var (vk, ch, mods) = ParseKey(key);
-        return Task.Run(() =>
+        bool isSelectAddress = vk == 'L' && mods.Length == 1 && mods[0] == NativeMethods.VK_CONTROL;
+        if (isSelectAddress)
         {
-            foreach (var m in mods)
-                NativeMethods.PostMessageW(hwnd, NativeMethods.WM_KEYDOWN, (IntPtr)m, IntPtr.Zero);
-            NativeMethods.PostMessageW(hwnd, NativeMethods.WM_KEYDOWN, (IntPtr)vk, IntPtr.Zero);
-            Thread.Sleep(25);
-            if (ch != 0)
-                NativeMethods.PostMessageW(hwnd, NativeMethods.WM_CHAR, (IntPtr)ch, IntPtr.Zero);
-            NativeMethods.PostMessageW(hwnd, NativeMethods.WM_KEYUP, (IntPtr)vk, IntPtr.Zero);
-            foreach (var m in mods.Reverse())
-                NativeMethods.PostMessageW(hwnd, NativeMethods.WM_KEYUP, (IntPtr)m, IntPtr.Zero);
-            return new InputResult(true, "postmessage_key", key);
-        }, ct);
+            var selected = await _uia.InvokeAsync(() =>
+            {
+                var address = FindChromiumAddressBar(hwnd);
+                if (address == null) return false;
+                address.SetFocus();
+                return true;
+            }, ct).ConfigureAwait(false);
+            if (selected)
+            {
+                _addressBarInputs[hwnd] = new AddressBarInput(null);
+                return new InputResult(true, "uia_address_focus", "Chrome address bar selected");
+            }
+        }
+
+        if (vk == 0x0D && mods.Length == 0 && _addressBarInputs.TryGetValue(hwnd, out var pending))
+        {
+            if (string.IsNullOrWhiteSpace(pending.Text))
+            {
+                _addressBarInputs.TryRemove(hwnd, out _);
+                return new InputResult(false, "uia_address_navigate", "No verified address-bar text is pending");
+            }
+
+            var addressFocused = await _uia.InvokeAsync(() =>
+            {
+                var address = FindChromiumAddressBar(hwnd);
+                if (address == null) return false;
+                address.SetFocus();
+                return true;
+            }, ct).ConfigureAwait(false);
+            if (!addressFocused)
+            {
+                _addressBarInputs.TryRemove(hwnd, out _);
+                return new InputResult(false, "uia_address_navigate", "Chrome address bar disappeared before navigation");
+            }
+
+            bool posted = await Task.Run(() => PostKeyMessages(hwnd, vk, ch, mods), ct).ConfigureAwait(false);
+            if (!posted)
+            {
+                _addressBarInputs.TryRemove(hwnd, out _);
+                return new InputResult(false, "uia_address_navigate", "PostMessage rejected the Return key");
+            }
+
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (DateTime.UtcNow < deadline)
+            {
+                ct.ThrowIfCancellationRequested();
+                bool navigated = await _uia.InvokeAsync(
+                    () => ChromiumDocumentHasUrl(hwnd, pending.Text), ct).ConfigureAwait(false);
+                if (navigated)
+                {
+                    _addressBarInputs.TryRemove(hwnd, out _);
+                    return new InputResult(true, "uia_address_navigate", "RootWebArea URL verified");
+                }
+                await Task.Delay(100, ct).ConfigureAwait(false);
+            }
+            _addressBarInputs.TryRemove(hwnd, out _);
+            return new InputResult(false, "uia_address_navigate",
+                "Return was posted, but Chrome RootWebArea did not reach the requested URL within 5 seconds");
+        }
+
+        bool accepted = await Task.Run(() => PostKeyMessages(hwnd, vk, ch, mods), ct).ConfigureAwait(false);
+        return accepted
+            ? new InputResult(true, "postmessage_key", key)
+            : new InputResult(false, "postmessage_key", "PostMessage rejected one or more key messages");
+    }
+
+    private static bool PostKeyMessages(IntPtr hwnd, int vk, int ch, int[] mods)
+    {
+        bool accepted = true;
+        foreach (var m in mods)
+            accepted &= NativeMethods.PostMessageW(hwnd, NativeMethods.WM_KEYDOWN, (IntPtr)m, IntPtr.Zero);
+        accepted &= NativeMethods.PostMessageW(hwnd, NativeMethods.WM_KEYDOWN, (IntPtr)vk, IntPtr.Zero);
+        Thread.Sleep(25);
+        if (ch != 0)
+            accepted &= NativeMethods.PostMessageW(hwnd, NativeMethods.WM_CHAR, (IntPtr)ch, IntPtr.Zero);
+        accepted &= NativeMethods.PostMessageW(hwnd, NativeMethods.WM_KEYUP, (IntPtr)vk, IntPtr.Zero);
+        foreach (var m in mods.Reverse())
+            accepted &= NativeMethods.PostMessageW(hwnd, NativeMethods.WM_KEYUP, (IntPtr)m, IntPtr.Zero);
+        return accepted;
+    }
+
+    private static bool ChromiumDocumentHasUrl(IntPtr hwnd, string expected)
+    {
+        var uia = new CUIAutomation8();
+        var root = uia.ElementFromHandle(hwnd);
+        var documents = root.FindAll(
+            TreeScope.TreeScope_Descendants,
+            uia.CreatePropertyCondition(UiaIds.ControlTypeProperty, 50030)); // Document
+        for (int i = 0; i < documents.Length; i++)
+        {
+            try
+            {
+                if (documents.GetElement(i).GetCurrentPattern(UiaIds.ValuePattern) is IUIAutomationValuePattern value
+                    && UrlsEqual(value.CurrentValue, expected))
+                    return true;
+            }
+            catch { /* document changed during navigation */ }
+        }
+        return false;
+    }
+
+    private static bool UrlsEqual(string? actual, string expected)
+    {
+        if (string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase)) return true;
+        return Uri.TryCreate(actual, UriKind.Absolute, out var actualUri)
+            && Uri.TryCreate(expected, UriKind.Absolute, out var expectedUri)
+            && actualUri.Equals(expectedUri);
     }
 
     private static (int vk, int ch, int[] mods) ParseKey(string key)

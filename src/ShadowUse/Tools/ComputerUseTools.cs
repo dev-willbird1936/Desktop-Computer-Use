@@ -6,6 +6,7 @@ using ModelContextProtocol.Server;
 using ShadowUse.Automation;
 using ShadowUse.Capture;
 using ShadowUse.Config;
+using ShadowUse.Native;
 using ShadowUse.Overlay;
 using ShadowUse.Safety;
 
@@ -107,10 +108,16 @@ public sealed class ComputerUseTools
             try
             {
                 var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
-                var cachedSnap = _uia.GetSnapshot(target);
+                // Element ids belong to the exact HWND that produced their snapshot.
+                // Chromium can temporarily make a popup its process MainWindowHandle,
+                // so resolving the PID again is not a reliable element-cache key.
+                var cachedSnap = element_id != null
+                    ? _uia.GetSnapshotForPid(target.Process.Id)
+                    : _uia.GetSnapshot(target);
                 ElementInfo? info = null;
                 Interop.UIAutomationClient.IUIAutomationElement? element = null;
                 Snapshot snap;
+                IntPtr actionHwnd = target.Hwnd;
 
                 if (element_id != null)
                 {
@@ -119,12 +126,15 @@ public sealed class ComputerUseTools
                     // can never contain an id from an older one. Fail clearly instead of
                     // silently walking the tree just to report a confusing "unknown id".
                     if (cachedSnap == null)
-                        return Error("No cached snapshot for this app (or the window changed since it was taken). Call get_app_state first.");
+                        return Error("No cached snapshot for this app. Call get_app_state first.");
                     snap = cachedSnap;
                     info = snap.Elements.FirstOrDefault(e => e.Id == element_id);
                     if (info == null)
                         return Error($"Unknown element id '{element_id}' in snapshot r{snap.Revision}. Call get_app_state for fresh ids.");
-                    element = await _uia.ResolveElementAsync(target.Hwnd, info, ct).ConfigureAwait(false);
+                    actionHwnd = snap.Hwnd;
+                    if (!NativeMethods.IsWindow(actionHwnd))
+                        return Error($"Element '{element_id}' belonged to a window that no longer exists. Re-run get_app_state.");
+                    element = await _uia.ResolveElementAsync(actionHwnd, info, ct).ConfigureAwait(false);
                     if (element == null)
                         return Error($"Element '{element_id}' no longer exists at its last known position. Re-run get_app_state.");
                 }
@@ -153,17 +163,90 @@ public sealed class ComputerUseTools
                 await Task.Delay(140, ct).ConfigureAwait(false); // let the pulse be visible
 
                 BackgroundInput.InputResult result = element_id != null
-                    ? await _input.ClickElementAsync(target.Hwnd, element, info, btn, click_count, ct).ConfigureAwait(false)
-                    : await _input.ClickAtAsync(target.Hwnd, x!.Value, y!.Value, btn, click_count, ct).ConfigureAwait(false);
+                    ? await _input.ClickElementAsync(actionHwnd, element, info, btn, click_count, ct).ConfigureAwait(false)
+                    : await _input.ClickAtAsync(actionHwnd, x!.Value, y!.Value, btn, click_count, ct).ConfigureAwait(false);
 
                 if (!result.Success) return Error($"Click failed: {result.Detail}");
 
                 await Task.Delay(_settings.PostActionDelayMs, ct).ConfigureAwait(false);
-                var after = await _uia.SnapshotAsync(target, ct: ct).ConfigureAwait(false);
+                Snapshot? after = null;
+                Exception? refreshError = null;
+                bool rootDisappeared = !NativeMethods.IsWindow(actionHwnd);
+
+                if (!rootDisappeared)
+                {
+                    try
+                    {
+                        var originalRoot = new AppTarget
+                        {
+                            Process = target.Process,
+                            Hwnd = actionHwnd,
+                            Title = snap.Title,
+                        };
+                        after = await _uia.SnapshotAsync(originalRoot, ct: ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+                    {
+                        // A semantic Invoke can synchronously destroy a Chromium popup.
+                        // Re-resolve below; never turn that observed effect into an MCP error.
+                        refreshError = ex;
+                        rootDisappeared = !NativeMethods.IsWindow(actionHwnd);
+                    }
+                }
+
+                if (after == null)
+                {
+                    try
+                    {
+                        var currentTarget = await _uia.ResolveAppAsync(target.Process.Id.ToString(), ct).ConfigureAwait(false);
+                        rootDisappeared |= currentTarget.Hwnd != actionHwnd;
+                        after = await _uia.SnapshotAsync(currentTarget, ct: ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+                    {
+                        refreshError ??= ex;
+                    }
+                }
+
+                bool elementDisappeared = info != null && (rootDisappeared ||
+                    (after != null && !ContainsRuntimeId(after, info.RuntimeId)));
+                bool stateChanged = after != null && HasObservableDelta(snap, after);
+                bool expansionObserved = result.Method == "uia_expand"
+                    && !rootDisappeared
+                    && !elementDisappeared
+                    && stateChanged
+                    && (info?.ControlType != "MenuItem" || (after != null && HasAddedMenuElement(snap, after)));
+                string effect = result.Method == "uia_expand"
+                    ? expansionObserved
+                        ? info?.ControlType == "MenuItem" ? "submenu_expanded" : "expanded"
+                        : "none"
+                    : rootDisappeared ? "transient_root_disappeared"
+                    : elementDisappeared ? "element_disappeared"
+                    : stateChanged ? "uia_state_changed"
+                    : "none";
+
+                if (effect == "none")
+                {
+                    return new
+                    {
+                        ok = false,
+                        method = result.Method,
+                        effect,
+                        revision = after?.Revision,
+                        changed_elements = after != null ? DeltaOf(snap, after) : null,
+                        detail = refreshError != null
+                            ? $"Click was dispatched, but the follow-up snapshot failed and no effect was observable: {refreshError.Message}"
+                            : "Click was dispatched, but the element remained and no UI Automation state change was observable."
+                    };
+                }
+
                 return new
                 {
-                    ok = true, method = result.Method, revision = after.Revision,
-                    changed_elements = DeltaOf(snap, after),
+                    ok = true,
+                    method = result.Method,
+                    effect,
+                    revision = after?.Revision,
+                    changed_elements = after != null ? DeltaOf(snap, after) : null,
                     hint = "Snapshot refreshed. If the UI changed a lot, call get_app_state for full detail."
                 };
             }
@@ -214,7 +297,12 @@ public sealed class ComputerUseTools
             {
                 var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
                 var result = await _input.PressKeyAsync(target.Hwnd, key, ct).ConfigureAwait(false);
-                return new { ok = result.Success, method = result.Method };
+                return new
+                {
+                    ok = result.Success,
+                    method = result.Method,
+                    detail = string.IsNullOrEmpty(result.Detail) ? null : result.Detail
+                };
             }
             finally { focusGuard?.Restore(); }
         }
@@ -448,6 +536,42 @@ public sealed class ComputerUseTools
         var b = before.Elements.Select(Key).ToHashSet();
         var a = after.Elements.Select(Key).ToHashSet();
         return new { added = a.Except(b).Count(), removed = b.Except(a).Count(), total = after.Elements.Count };
+    }
+
+    private static bool ContainsRuntimeId(Snapshot snapshot, int[] runtimeId)
+        => snapshot.Elements.Any(element => element.RuntimeId.SequenceEqual(runtimeId));
+
+    private static bool HasAddedMenuElement(Snapshot before, Snapshot after)
+    {
+        static string Key(ElementInfo element) => string.Join(",", element.RuntimeId);
+        var priorRuntimeIds = before.Elements.Select(Key).ToHashSet();
+        return after.Elements.Any(element =>
+            element.ControlType is "Menu" or "MenuBar" or "MenuItem"
+            && !priorRuntimeIds.Contains(Key(element)));
+    }
+
+    private static bool HasObservableDelta(Snapshot before, Snapshot after)
+    {
+        static string Key(ElementInfo element) => string.Join(",", element.RuntimeId);
+        var beforeByRuntimeId = before.Elements.ToDictionary(Key);
+        var afterByRuntimeId = after.Elements.ToDictionary(Key);
+        if (!beforeByRuntimeId.Keys.ToHashSet().SetEquals(afterByRuntimeId.Keys)) return true;
+
+        foreach (var (runtimeId, oldElement) in beforeByRuntimeId)
+        {
+            var newElement = afterByRuntimeId[runtimeId];
+            if (oldElement.Name != newElement.Name
+                || oldElement.Value != newElement.Value
+                || oldElement.ControlType != newElement.ControlType
+                || oldElement.AutomationId != newElement.AutomationId
+                || oldElement.X != newElement.X
+                || oldElement.Y != newElement.Y
+                || oldElement.Width != newElement.Width
+                || oldElement.Height != newElement.Height
+                || !oldElement.Actions.SequenceEqual(newElement.Actions))
+                return true;
+        }
+        return false;
     }
 
     private static string? Str(JsonElement args, string name)

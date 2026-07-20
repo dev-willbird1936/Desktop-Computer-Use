@@ -233,6 +233,13 @@ public sealed class UiaService
         return s.Hwnd == target.Hwnd ? s : null;
     }
 
+    /// <summary>The latest snapshot owned by a process, regardless of which of that
+    /// process's top-level windows is currently reported as MainWindowHandle. Element
+    /// ids remain tied to <see cref="Snapshot.Hwnd"/>; callers must act through that
+    /// exact root after validating that it still exists.</summary>
+    public Snapshot? GetSnapshotForPid(int pid)
+        => _snapshots.TryGetValue(pid.ToString(), out var snapshot) ? snapshot : null;
+
     // ---------- Element resolution ----------
 
     public Task<IUIAutomationElement?> ResolveElementAsync(IntPtr hwnd, ElementInfo info, CancellationToken ct = default)

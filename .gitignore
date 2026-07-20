@@ -13,3 +13,13 @@ settings.json
 Thumbs.db
 .DS_Store
 publish/
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# ad-hoc scratch publish output (debug builds, not for release)
+publish-*/
+
+# local AI-tooling cache/config (not part of the shipped project)
+.serena/

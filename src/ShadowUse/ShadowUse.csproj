@@ -13,7 +13,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
 
     <!-- Attribution -->
     <Authors>dev-willbird1936</Authors>
