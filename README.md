@@ -11,42 +11,16 @@
 itself as focused. You keep working; it works alongside you. A cosmetic virtual
 cursor (green ghost) shows what it's doing.
 
-Design notes live in [docs/background-control-design.md](docs/background-control-design.md)
-and [docs/repo-feature-analysis.md](docs/repo-feature-analysis.md); the benchmark
-suite and its results are in [docs/benchmarks.md](docs/benchmarks.md).
+The benchmark suite and its results are in [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Contents
 
-- [Why it doesn't interrupt you](#why-it-doesnt-interrupt-you)
 - [Quick start](#quick-start)
 - [Tools](#tools)
 - [Settings](#settings-settingsjson)
 - [Build from source](#build-from-source)
 - [Architecture](#architecture)
 - [Known limits](#known-limits-honest-list)
-
-## Why it doesn't interrupt you
-
-Most Windows automation servers inject input through `SetCursorPos`/`mouse_event`/
-`SendInput` — the hardware input pipeline. That teleports your cursor and steals
-foreground. shadow-use never calls those APIs:
-
-1. **UIA patterns first** — `InvokePattern.Invoke()`, `TogglePattern`, `SelectionItemPattern`,
-   `ScrollPattern`, `ValuePattern` execute *inside* the target process. No activation, by design.
-2. **Window messages second** — `PostMessage`/`SendMessage` (`WM_LBUTTONDOWN/UP`,
-   `WM_MOUSEWHEEL`, `WM_KEYDOWN/UP`, `WM_CHAR`) delivered straight to the target
-   window's queue (the actual child window under the point, via `WindowFromPoint`).
-   The OS cursor and keyboard focus are never involved.
-3. **Focus-free typing** — finds the real edit control (scored: `RichEdit*` > `*Edit*` > `*Text*`,
-   so wrapper classes don't shadow the true input) and inserts via
-   `EM_SETSEL` + `EM_REPLACESEL`. The control never needs keyboard focus.
-4. **Screenshots that see through occlusion** — `PrintWindow(PW_RENDERFULLCONTENT)`
-   captures the window's own backing surface even when it's covered by other windows;
-   GDI `CopyFromScreen` as fallback.
-5. **Virtual cursor** — a layered, per-pixel-alpha, topmost, click-through,
-   non-activating overlay (`WS_EX_LAYERED|TRANSPARENT|TOPMOST|NOACTIVATE`,
-   `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`). Pure theater: it shows
-   actions, it never *is* the input.
 
 ## Quick start
 
