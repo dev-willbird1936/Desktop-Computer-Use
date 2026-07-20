@@ -1,12 +1,29 @@
 # shadow-use
 
+<p align="left">
+<img alt="License: MIT" src="https://img.shields.io/github/license/dev-willbird1936/Desktop-Computer-Use">
+<img alt="Latest release" src="https://img.shields.io/github/v/release/dev-willbird1936/Desktop-Computer-Use">
+<img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows-0078D6">
+</p>
+
 **Background computer control for Windows** — an MCP server that drives desktop apps
 *without* moving your real cursor, stealing focus, or making the target app count
 itself as focused. You keep working; it works alongside you. A cosmetic virtual
 cursor (green ghost) shows what it's doing.
 
-Design notes live in `docs/background-control-design.md` and
-`docs/repo-feature-analysis.md`.
+Design notes live in [docs/background-control-design.md](docs/background-control-design.md)
+and [docs/repo-feature-analysis.md](docs/repo-feature-analysis.md); the benchmark
+suite and its results are in [docs/benchmarks.md](docs/benchmarks.md).
+
+## Contents
+
+- [Why it doesn't interrupt you](#why-it-doesnt-interrupt-you)
+- [Quick start](#quick-start)
+- [Tools](#tools)
+- [Settings](#settings-settingsjson)
+- [Build from source](#build-from-source)
+- [Architecture](#architecture)
+- [Known limits](#known-limits-honest-list)
 
 ## Why it doesn't interrupt you
 
@@ -31,13 +48,34 @@ foreground. shadow-use never calls those APIs:
    `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`). Pure theater: it shows
    actions, it never *is* the input.
 
+## Quick start
+
+Download `dcu.exe` from the [latest release](https://github.com/dev-willbird1936/Desktop-Computer-Use/releases/latest) —
+self-contained single file, no .NET install required.
+
+### Wire into Claude Code
+
+```bash
+claude mcp add dcu -- "C:\path\to\dcu.exe"
+```
+
+### Wire into another MCP client (config.toml style)
+
+```toml
+[mcp_servers.dcu]
+command = 'C:\path\to\dcu.exe'
+```
+
+Run `dcu.exe --doctor` any time for a diagnostics check (desktop session, UIA,
+overlay).
+
 ## Tools
 
 | Tool | What it does |
 |---|---|
 | `list_apps` | Running apps with visible windows (name, pid, title) |
 | `get_app_state` | Accessibility-tree snapshot: labeled interactive elements (`e12`…), frames, actions, values; optional annotated Set-of-Marks screenshot. Returns a `revision` |
-| `click` | By element id (UIA Invoke/Toggle/Select → message click at element center) or screen x,y. left/right/middle, click counts |
+| `click` | By element id (UIA Invoke/Toggle/Select/Expand → message click at element center) or screen x,y. left/right/middle, click counts. Reports an observed `effect` (`expanded` / `uia_state_changed` / `element_disappeared` / `none`), not just dispatch success |
 | `type_text` | `EM_REPLACESEL` → UIA SetValue-append → `WM_CHAR` stream |
 | `press_key` | `'Return'`, `'ctrl+s'`, `'F5'`… via posted key messages |
 | `scroll` | UIA `ScrollPattern` → wheel message fallback |
@@ -76,7 +114,7 @@ password fields included.
 
 A browser-based settings page is included: run `dcu-settings.bat`, toggle, save.
 
-## Build & run
+## Build from source
 
 ```bash
 cd src/ShadowUse
@@ -84,17 +122,11 @@ dotnet build            # needs .NET 10 SDK
 dotnet run -- --doctor  # diagnostics
 ```
 
-### Wire into Claude Code
+To produce a release-style self-contained single-file exe:
 
 ```bash
-claude mcp add dcu -- "C:\path\to\Desktop-Computer-Use\publish\dcu.exe"
-```
-
-### Wire into another MCP client (config.toml style)
-
-```toml
-[mcp_servers.dcu]
-command = 'C:\path\to\Desktop-Computer-Use\publish\dcu.exe'
+dotnet publish src/ShadowUse/ShadowUse.csproj -c Release -r win-x64 \
+  --self-contained true -p:PublishSingleFile=true -o publish
 ```
 
 ## Architecture
@@ -118,7 +150,8 @@ Safety/Guard             optional bounds/lock-screen guards (disabled by default
   accelerator tables check for the modifier. Fixing this properly would mean calling
   `SendInput`/`keybd_event` to set real OS-level key state — exactly the hardware input
   pipeline this tool exists to avoid touching. Single keys and most non-modifier shortcuts
-  are unaffected.
+  are unaffected. (Chrome's `ctrl+l` address-bar focus is a specific, verified exception —
+  it's handled through UIA instead of posted keys.)
 - A `WM_LBUTTONDOWN` can still make an app self-activate (rare).
 - `PrintWindow` fails on some hardware-accelerated apps → falls back to visible-region capture.
 - UIA `SetValue` append can briefly foreground some apps (disable via `AllowUiaTextFallback: false`).
