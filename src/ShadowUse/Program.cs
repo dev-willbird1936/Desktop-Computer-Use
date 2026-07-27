@@ -32,7 +32,7 @@ internal static class Program
         builder.Services
             .AddMcpServer(o =>
             {
-                o.ServerInfo = new() { Name = "dcu", Version = "0.1.0" };
+                o.ServerInfo = new() { Name = "dcu", Version = "0.1.1" };
                 o.ServerInstructions = """
                     Background computer control for Windows. All actions are focus-free:
                     UIA patterns or posted window messages — the real cursor never moves,
@@ -72,7 +72,7 @@ internal static class Program
 
     private static int Doctor()
     {
-        Console.Error.WriteLine("shadow-use doctor");
+        Console.Error.WriteLine("Desktop Computer Use (DCU) doctor");
         var err = Safety.Guard.CheckInteractiveDesktop();
         Console.Error.WriteLine(err == null ? "  interactive desktop: OK" : $"  interactive desktop: {err}");
         try

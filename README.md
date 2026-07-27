@@ -1,4 +1,4 @@
-# shadow-use
+# Desktop Computer Use (DCU)
 
 <p align="left">
 <img alt="License: MIT" src="https://img.shields.io/github/license/dev-willbird1936/Desktop-Computer-Use">
@@ -6,65 +6,71 @@
 <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows-0078D6">
 </p>
 
-**Background computer control for Windows** — an MCP server that drives desktop apps
-*without* moving your real cursor, stealing focus, or making the target app count
-itself as focused. You keep working; it works alongside you. A cosmetic virtual
-cursor (green ghost) shows what it's doing.
+**Desktop Computer Use**, or **DCU**, is a background Windows computer-use MCP server. It controls desktop applications without moving your real cursor, stealing focus, or making the target application count itself as focused.
 
-The benchmark suite and its results are in [docs/benchmarks.md](docs/benchmarks.md).
+Use the short name **DCU** in agent instructions to distinguish it from built-in foreground computer-use tools:
 
-## Contents
+> Use DCU to control the Windows desktop in the background.
 
-- [Quick start](#quick-start)
-- [Tools](#tools)
-- [Settings](#settings-settingsjson)
-- [Build from source](#build-from-source)
-- [Architecture](#architecture)
-- [Known limits](#known-limits-honest-list)
+A cosmetic green virtual cursor shows DCU actions while you continue working normally.
 
-## Quick start
+## Why DCU
 
-Download `dcu.exe` from the [latest release](https://github.com/dev-willbird1936/Desktop-Computer-Use/releases/latest) —
-self-contained single file, no .NET install required.
+| Capability | Result |
+| --- | --- |
+| Focus-free control | Your active application, keyboard focus, and real cursor remain available. |
+| UIA-first actions | DCU uses accessibility patterns before window-message fallbacks. |
+| Background screenshots | It can capture many visible or occluded windows without activating them. |
+| Observable actions | Action results report detected effects instead of dispatch success alone. |
+| MCP-native interface | Claude Code, Codex, and other MCP clients can use the same tool contract. |
 
-### Wire into Claude Code
+The benchmark suite and current results are documented in [`docs/benchmarks.md`](docs/benchmarks.md).
+
+## Quick Start
+
+Download `dcu.exe` from the [latest release](https://github.com/dev-willbird1936/Desktop-Computer-Use/releases/latest). It is a self-contained Windows executable and does not require a separate .NET installation.
+
+### Claude Code
 
 ```bash
 claude mcp add dcu -- "C:\path\to\dcu.exe"
 ```
 
-### Wire into another MCP client (config.toml style)
+### Codex or another MCP client
 
 ```toml
 [mcp_servers.dcu]
 command = 'C:\path\to\dcu.exe'
 ```
 
-Run `dcu.exe --doctor` any time for a diagnostics check (desktop session, UIA,
-overlay).
+Run diagnostics at any time:
+
+```powershell
+.\dcu.exe --doctor
+```
 
 ## Tools
 
 | Tool | What it does |
-|---|---|
-| `list_apps` | Running apps with visible windows (name, pid, title) |
-| `get_app_state` | Accessibility-tree snapshot: labeled interactive elements (`e12`…), frames, actions, values; optional annotated Set-of-Marks screenshot. Returns a `revision` |
-| `click` | By element id (UIA Invoke/Toggle/Select/Expand → message click at element center) or screen x,y. left/right/middle, click counts. Reports an observed `effect` (`expanded` / `uia_state_changed` / `element_disappeared` / `none`), not just dispatch success |
-| `type_text` | `EM_REPLACESEL` → UIA SetValue-append → `WM_CHAR` stream |
-| `press_key` | `'Return'`, `'ctrl+s'`, `'F5'`… via posted key messages |
-| `scroll` | UIA `ScrollPattern` → wheel message fallback |
-| `drag` | Message-based drag with interpolated moves |
-| `set_value` | Direct `ValuePattern.SetValue` / toggle-to-bool |
-| `wait_for` | Server-side polling: `text_exists`, `element_exists`, `window_active` |
-| `execute_sequence` | Batch steps server-side (`stop_on_error`) |
-| `hide_cursor` | Hide the virtual cursor overlay |
-| `health_check` | Desktop session / UIA / overlay diagnostics |
+| --- | --- |
+| `list_apps` | Lists running applications with visible windows. |
+| `get_app_state` | Returns an accessibility-tree snapshot, labeled elements, actions, values, and an optional annotated screenshot. |
+| `click` | Uses UIA patterns or a message click and reports an observed effect. |
+| `type_text` | Types through control messages or UIA value patterns. |
+| `press_key` | Posts a key or key combination. |
+| `scroll` | Uses the UIA scroll pattern, then a wheel-message fallback. |
+| `drag` | Performs a message-based drag with interpolated movement. |
+| `set_value` | Sets a value or toggle state directly. |
+| `wait_for` | Polls for text, elements, or window state on the server. |
+| `execute_sequence` | Runs several steps in one server-side batch. |
+| `hide_cursor` | Hides the cosmetic virtual cursor. |
+| `health_check` | Checks the desktop session, UIA thread, and overlay. |
 
-## Settings (settings.json)
+## Settings
 
-Optional. Read from next to the exe, else `%APPDATA%\shadow-use\settings.json`.
-**All trust gates are OFF by default** — the tool acts on whatever you point it at,
-password fields included.
+DCU reads `settings.json` next to the executable, then falls back to `%APPDATA%\shadow-use\settings.json`.
+
+> **Security:** Trust gates are disabled by default. DCU acts on the target you select, including password fields.
 
 ```json
 {
@@ -78,63 +84,61 @@ password fields included.
 ```
 
 | Key | Default | Meaning |
-|---|---|---|
-| `AllowUiaTextFallback` | `true` | UIA `SetValue` append as typing fallback (can briefly foreground some apps) |
-| `EnableBoundsGuard` | `false` | Refuse coordinate input if the window moved since the last snapshot |
-| `EnableDesktopCheck` | `false` | Refuse to act on lock screen / secure desktop |
-| `ShowVirtualCursor` | `true` | Green ghost cursor during actions |
-| `EnableFocusGuard` | `true` | Restore your foreground window + caret after actions that grab them |
-| `PostActionDelayMs` | `150` | Settle time before the follow-up snapshot |
+| --- | --- | --- |
+| `AllowUiaTextFallback` | `true` | Allows UIA `SetValue` as a typing fallback. It can briefly foreground some applications. |
+| `EnableBoundsGuard` | `false` | Refuses coordinate input when the window moved after the last snapshot. |
+| `EnableDesktopCheck` | `false` | Refuses actions on the lock screen or secure desktop. |
+| `ShowVirtualCursor` | `true` | Shows the green cosmetic cursor during actions. |
+| `EnableFocusGuard` | `true` | Restores the foreground window and caret after an action takes them. |
+| `PostActionDelayMs` | `150` | Wait time before the follow-up snapshot. |
 
-A browser-based settings page is included: run `dcu-settings.bat`, toggle, save.
+Run `dcu-settings.bat` to edit these settings in a browser and save them.
 
-## Build from source
+## Build From Source
 
-```bash
-cd src/ShadowUse
-dotnet build            # needs .NET 10 SDK
-dotnet run -- --doctor  # diagnostics
+Requirements:
+
+- Windows
+- .NET 10 SDK
+
+```powershell
+dotnet build src/ShadowUse/ShadowUse.csproj
+dotnet run --project src/ShadowUse/ShadowUse.csproj -- --doctor
 ```
 
-To produce a release-style self-contained single-file exe:
+Create a self-contained release executable:
 
-```bash
-dotnet publish src/ShadowUse/ShadowUse.csproj -c Release -r win-x64 \
+```powershell
+dotnet publish src/ShadowUse/ShadowUse.csproj -c Release -r win-x64 `
   --self-contained true -p:PublishSingleFile=true -o publish
 ```
 
 ## Architecture
 
-```
-Program.cs               MCP stdio host (ModelContextProtocol SDK), logs→stderr
-Config/Settings          settings.json loader (trust gates off by default)
-Automation/UiaThread     dedicated STA thread — all UIA COM lives here
-Automation/UiaService    app resolution, tree snapshots w/ Set-of-Marks ids, runtimeId re-resolution
-Automation/BackgroundInput  UIA-pattern-first → PostMessage cascade (no SendInput anywhere)
-Capture/ScreenshotService   PrintWindow → CopyFromScreen; SoM annotation
-Overlay/VirtualCursorOverlay cosmetic layered cursor w/ spring motion + click pulse
-Safety/Guard             optional bounds/lock-screen guards (disabled by default)
+```text
+Program.cs                 MCP stdio host; logs go to stderr
+Config/Settings            settings.json loader
+Automation/UiaThread       dedicated STA thread for UIA COM
+Automation/UiaService      snapshots, element IDs, and re-resolution
+Automation/BackgroundInput UIA-pattern-first input with message fallbacks
+Capture/ScreenshotService  PrintWindow and visible-region capture
+Overlay/VirtualCursorOverlay cosmetic cursor and click animation
+Safety/Guard               optional bounds and desktop guards
 ```
 
-## Known limits (honest list)
+## Known Limits
 
-- Apps reading raw input / `GetAsyncKeyState` (games, some hotkey systems) can't see posted messages.
-- Modifier-key accelerators (`ctrl+s`, `ctrl+f`, etc.) posted via `press_key` don't always
-  fire: posted `WM_KEYDOWN` doesn't update `GetKeyState`, which is what most apps'
-  accelerator tables check for the modifier. Fixing this properly would mean calling
-  `SendInput`/`keybd_event` to set real OS-level key state — exactly the hardware input
-  pipeline this tool exists to avoid touching. Single keys and most non-modifier shortcuts
-  are unaffected. (Chrome's `ctrl+l` address-bar focus is a specific, verified exception —
-  it's handled through UIA instead of posted keys.)
-- A `WM_LBUTTONDOWN` can still make an app self-activate (rare).
-- `PrintWindow` fails on some hardware-accelerated apps → falls back to visible-region capture.
-- UIA `SetValue` append can briefly foreground some apps (disable via `AllowUiaTextFallback: false`).
-- Minimized windows can't be captured (no backing surface); restore them first.
-- Elevated (admin) targets can't be reached from a non-elevated shadow-use.
+- Games and applications that read raw input or `GetAsyncKeyState` cannot see posted messages.
+- Modifier shortcuts do not always fire because posted messages do not update system-level modifier state. Chrome address-bar focus is handled through UIA as a verified exception.
+- A message click can rarely make an application activate itself.
+- `PrintWindow` fails on some hardware-accelerated applications and then falls back to visible-region capture.
+- The UIA text fallback can briefly foreground some applications.
+- Minimized windows do not have a capturable backing surface.
+- A non-elevated DCU process cannot control elevated targets.
 
 ---
 
 <p align="center">
-<b>Desktop-Computer-Use</b> — designed and built by <a href="https://github.com/dev-willbird1936">dev-willbird1936</a>.<br>
-MIT licensed. If you redistribute or rebrand, keep the LICENSE and NOTICE intact.
+<b>Desktop Computer Use (DCU)</b> — designed and built by <a href="https://github.com/dev-willbird1936">dev-willbird1936</a>.<br>
+MIT licensed. Keep the LICENSE and NOTICE files when redistributing or rebranding.
 </p>

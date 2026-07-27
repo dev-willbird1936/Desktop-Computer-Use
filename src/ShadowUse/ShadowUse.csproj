@@ -8,8 +8,8 @@
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>ShadowUse</RootNamespace>
-    <AssemblyName>shadow-use</AssemblyName>
-    <Description>Background (focus-free) Windows computer-use MCP server: UIA patterns + window messages, virtual cursor overlay, occluded-window capture.</Description>
+    <AssemblyName>dcu</AssemblyName>
+    <Description>Desktop Computer Use (DCU): background Windows computer-use MCP server with UIA actions, window messages, a virtual cursor, and occluded-window capture.</Description>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <InvariantGlobalization>true</InvariantGlobalization>

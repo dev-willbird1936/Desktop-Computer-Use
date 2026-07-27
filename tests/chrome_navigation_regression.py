@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DCU = ROOT / "src" / "ShadowUse" / "bin" / "Debug" / "net10.0-windows10.0.22621.0" / "shadow-use.exe"
+DEFAULT_DCU = ROOT / "src" / "ShadowUse" / "bin" / "Debug" / "net10.0-windows10.0.22621.0" / "dcu.exe"
 DEFAULT_CHROME = Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "Application" / "chrome.exe"
 ARTIFACT_ROOT = Path(os.environ.get("TEMP", tempfile.gettempdir())) / "dcu-chrome-navigation-regression"
 
