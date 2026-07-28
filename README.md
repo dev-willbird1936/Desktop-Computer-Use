@@ -53,7 +53,7 @@ Run diagnostics at any time:
 
 | Tool | What it does |
 | --- | --- |
-| `list_apps` | Lists running applications with visible windows. |
+| `list_apps` | Lists each visible top-level window with its PID, HWND, title, and stable `window_id`. |
 | `get_app_state` | Returns an accessibility-tree snapshot, labeled elements, actions, values, and an optional annotated screenshot. |
 | `click` | Uses UIA patterns or a message click and reports an observed effect. |
 | `type_text` | Types through control messages or UIA value patterns. |
@@ -64,9 +64,11 @@ Run diagnostics at any time:
 | `wait_for` | Polls for text, elements, or window state on the server. |
 | `execute_sequence` | Runs several steps in one server-side batch. |
 | `hide_cursor` | Hides the cosmetic virtual cursor. |
-
-If more than one application matches a name or title, DCU returns an ambiguity error. Use the PID from `list_apps` to select the exact process.
 | `health_check` | Checks the desktop session, UIA thread, and overlay. |
+
+If more than one window matches a name, title, or PID, DCU returns an ambiguity error. Use the `window_id` from `list_apps` to select the exact window.
+
+Snapshot-based element clicks read the current UIA bounds before acting. Raw snapshot coordinates and drag points are translated when the window moves. Take a new snapshot after a resize when the application uses a responsive layout.
 
 ## Settings
 
@@ -90,7 +92,7 @@ DCU reads `settings.json` next to the executable, then falls back to `%APPDATA%\
 | `AllowUiaTextFallback` | `true` | Allows UIA `SetValue` as a typing fallback. It can briefly foreground some applications. |
 | `EnableBoundsGuard` | `false` | Refuses coordinate input when the window moved after the last snapshot. |
 | `EnableDesktopCheck` | `false` | Refuses actions on the lock screen or secure desktop. |
-| `ShowVirtualCursor` | `true` | Shows the green cosmetic cursor during actions. |
+| `ShowVirtualCursor` | `true` | Shows the green cosmetic cursor during actions. It disappears after one minute without use. |
 | `EnableFocusGuard` | `true` | Restores the foreground window and caret after an action takes them. |
 | `PostActionDelayMs` | `150` | Wait time before the follow-up snapshot. |
 
@@ -114,6 +116,7 @@ Windows shortcuts are also included:
 setup.bat
 run.bat --doctor
 test.bat
+stress-test.bat
 ```
 
 Create a self-contained release executable:

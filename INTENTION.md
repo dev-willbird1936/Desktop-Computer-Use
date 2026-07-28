@@ -9,9 +9,11 @@ Provide reliable Windows desktop control through MCP without moving the real cur
 - Window messages use bounded timeouts where synchronous replies are required.
 - Focus restoration occurs only when the automation target took foreground.
 - Window capture does not read unrelated visible screen content unless explicitly allowed.
-- App selection rejects ambiguous process names and accepts PID selection.
+- App selection enumerates independent top-level windows, rejects ambiguous names and PIDs, and accepts stable `window_id` selection.
+- Element frames and raw snapshot coordinates adjust when a target window moves.
+- The cosmetic cursor disappears after one minute without an action.
 - Tool inputs, settings values, cached element IDs, and benchmark native structures are validated.
-- Build, run, settings, and test batch files support the complete local workflow.
+- Build, run, settings, standard test, and isolated multi-window stress-test batch files support the complete local workflow.
 
 # INTENTION NOT MATCHED
 
