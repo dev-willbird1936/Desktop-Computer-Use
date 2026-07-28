@@ -36,6 +36,7 @@ public static partial class NativeMethods
     public const uint PW_RENDERFULLCONTENT = 0x00000002;
 
     public const int SMTO_ABORTIFHUNG = 0x0002;
+    public const int SMTO_ERRORONEXIT = 0x0020;
 
     public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
     public const int DWMWA_CLOAKED = 13;
@@ -69,8 +70,11 @@ public static partial class NativeMethods
     public struct POINT { public int X; public int Y; }
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct RECT { public int Left; public int Top; public int Right; public int Bottom;
-        public int Width => Right - Left; public int Height => Bottom - Top; }
+    public struct RECT
+    {
+        public int Left; public int Top; public int Right; public int Bottom;
+        public int Width => Right - Left; public int Height => Bottom - Top;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct BLENDFUNCTION { public byte BlendOp; public byte BlendFlags; public byte SourceConstantAlpha; public byte AlphaFormat; }
@@ -96,6 +100,10 @@ public static partial class NativeMethods
 
     [LibraryImport("user32.dll", SetLastError = true)]
     internal static partial IntPtr SendMessageTimeoutW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam,
+        uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+
+    [LibraryImport("user32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial IntPtr SendMessageTimeoutW(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam,
         uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 
     [LibraryImport("user32.dll", SetLastError = true)]

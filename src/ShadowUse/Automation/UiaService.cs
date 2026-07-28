@@ -39,7 +39,8 @@ public sealed class Snapshot
 /// <summary>Resolved target app.</summary>
 public sealed class AppTarget
 {
-    public required Process Process;
+    public required int Pid;
+    public required string ProcessName;
     public required IntPtr Hwnd;
     public required string Title;
 }
@@ -73,12 +74,20 @@ public sealed class UiaService
             {
                 try
                 {
-                    if (p.MainWindowHandle == IntPtr.Zero) continue;
+                    var hwnd = p.MainWindowHandle;
+                    if (hwnd == IntPtr.Zero) continue;
                     var title = p.MainWindowTitle;
                     if (string.IsNullOrWhiteSpace(title)) continue;
-                    list.Add(new AppTarget { Process = p, Hwnd = p.MainWindowHandle, Title = title });
+                    list.Add(new AppTarget
+                    {
+                        Pid = p.Id,
+                        ProcessName = p.ProcessName,
+                        Hwnd = hwnd,
+                        Title = title,
+                    });
                 }
                 catch { /* process exited */ }
+                finally { p.Dispose(); }
             }
             return list.ToArray();
         }, ct);
@@ -86,19 +95,36 @@ public sealed class UiaService
     public async Task<AppTarget> ResolveAppAsync(string app, CancellationToken ct = default)
     {
         var apps = await ListAppsAsync(ct).ConfigureAwait(false);
+        return SelectApp(apps, app);
+    }
+
+    private static AppTarget SelectApp(AppTarget[] apps, string app)
+    {
         AppTarget? match = null;
         if (int.TryParse(app, out var pid))
-            match = apps.FirstOrDefault(a => a.Process.Id == pid);
+            match = apps.FirstOrDefault(a => a.Pid == pid);
         var appNoExeSuffix = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app[..^4] : app;
-        match ??= apps.FirstOrDefault(a =>
-                a.Process.ProcessName.Equals(app, StringComparison.OrdinalIgnoreCase)
-             || a.Process.ProcessName.Equals(appNoExeSuffix, StringComparison.OrdinalIgnoreCase))
-            ?? apps.FirstOrDefault(a => a.Title.Equals(app, StringComparison.OrdinalIgnoreCase))
-            ?? apps.FirstOrDefault(a => a.Title.Contains(app, StringComparison.OrdinalIgnoreCase))
-            ?? apps.FirstOrDefault(a => a.Process.ProcessName.Contains(app, StringComparison.OrdinalIgnoreCase));
         if (match == null)
-            throw new InvalidOperationException($"App not found: '{app}'. Running apps: {string.Join(", ", apps.Take(20).Select(a => $"{a.Process.ProcessName} ({a.Process.Id})"))}");
+        {
+            match = SelectSingle(apps.Where(a =>
+                        a.ProcessName.Equals(app, StringComparison.OrdinalIgnoreCase)
+                     || a.ProcessName.Equals(appNoExeSuffix, StringComparison.OrdinalIgnoreCase)))
+                ?? SelectSingle(apps.Where(a => a.Title.Equals(app, StringComparison.OrdinalIgnoreCase)))
+                ?? SelectSingle(apps.Where(a => a.Title.Contains(app, StringComparison.OrdinalIgnoreCase)))
+                ?? SelectSingle(apps.Where(a => a.ProcessName.Contains(app, StringComparison.OrdinalIgnoreCase)));
+        }
+        if (match == null)
+            throw new InvalidOperationException($"App not found: '{app}'. Running apps: {string.Join(", ", apps.Take(20).Select(a => $"{a.ProcessName} ({a.Pid})"))}");
         return match;
+
+        AppTarget? SelectSingle(IEnumerable<AppTarget> candidates)
+        {
+            var matches = candidates.ToArray();
+            if (matches.Length > 1)
+                throw new InvalidOperationException(
+                    $"App selector '{app}' is ambiguous. Use a PID: {string.Join(", ", matches.Select(a => $"{a.Title} (PID {a.Pid})"))}");
+            return matches.SingleOrDefault();
+        }
     }
 
     // ---------- Snapshot ----------
@@ -145,8 +171,8 @@ public sealed class UiaService
             var snap = new Snapshot
             {
                 Revision = revision,
-                App = app.Process.ProcessName,
-                Pid = app.Process.Id,
+                App = app.ProcessName,
+                Pid = app.Pid,
                 Hwnd = app.Hwnd,
                 Title = app.Title,
                 Bounds = bounds,
@@ -221,7 +247,7 @@ public sealed class UiaService
             if (snap.TreeText.Length > textLimit * 40) snap.TreeText = snap.TreeText[..(textLimit * 40)] + "\n... (truncated)";
             // Keyed by pid only — process name can collide (two Chrome windows are two
             // processes sharing the name "chrome"), pid never does.
-            _snapshots[app.Process.Id.ToString()] = snap;
+            _snapshots[app.Pid.ToString()] = snap;
             return snap;
         }, ct);
 
@@ -229,7 +255,7 @@ public sealed class UiaService
     /// stale (the process's main window handle changed since the snapshot was taken).</summary>
     public Snapshot? GetSnapshot(AppTarget target)
     {
-        if (!_snapshots.TryGetValue(target.Process.Id.ToString(), out var s)) return null;
+        if (!_snapshots.TryGetValue(target.Pid.ToString(), out var s)) return null;
         return s.Hwnd == target.Hwnd ? s : null;
     }
 
@@ -311,9 +337,12 @@ public sealed class UiaService
 
     private static bool HasActionablePattern(IUIAutomationElement el)
     {
-        try { return el.GetCurrentPattern(UiaIds.InvokePattern) != null
+        try
+        {
+            return el.GetCurrentPattern(UiaIds.InvokePattern) != null
                   || el.GetCurrentPattern(UiaIds.TogglePattern) != null
-                  || el.GetCurrentPattern(UiaIds.SelectionItemPattern) != null; }
+                  || el.GetCurrentPattern(UiaIds.SelectionItemPattern) != null;
+        }
         catch { return false; }
     }
 
@@ -337,16 +366,46 @@ public sealed class UiaService
 
     public static string ControlTypeName(int id) => id switch
     {
-        50000 => "Button", 50001 => "Calendar", 50002 => "CheckBox", 50003 => "ComboBox",
-        50004 => "Edit", 50005 => "Hyperlink", 50006 => "Image", 50007 => "ListItem",
-        50008 => "List", 50009 => "Menu", 50010 => "MenuBar", 50011 => "MenuItem",
-        50012 => "ProgressBar", 50013 => "RadioButton", 50014 => "ScrollBar", 50015 => "Slider",
-        50016 => "Spinner", 50017 => "StatusBar", 50018 => "Tab", 50019 => "TabItem",
-        50020 => "Text", 50021 => "ToolBar", 50022 => "ToolTip", 50023 => "Tree",
-        50024 => "TreeItem", 50025 => "Custom", 50026 => "Group", 50027 => "Thumb",
-        50028 => "DataGrid", 50029 => "DataItem", 50030 => "Document", 50031 => "SplitButton",
-        50032 => "Window", 50033 => "Pane", 50034 => "Header", 50035 => "HeaderItem",
-        50036 => "Table", 50037 => "TitleBar", 50038 => "Separator", _ => $"Type{id}"
+        50000 => "Button",
+        50001 => "Calendar",
+        50002 => "CheckBox",
+        50003 => "ComboBox",
+        50004 => "Edit",
+        50005 => "Hyperlink",
+        50006 => "Image",
+        50007 => "ListItem",
+        50008 => "List",
+        50009 => "Menu",
+        50010 => "MenuBar",
+        50011 => "MenuItem",
+        50012 => "ProgressBar",
+        50013 => "RadioButton",
+        50014 => "ScrollBar",
+        50015 => "Slider",
+        50016 => "Spinner",
+        50017 => "StatusBar",
+        50018 => "Tab",
+        50019 => "TabItem",
+        50020 => "Text",
+        50021 => "ToolBar",
+        50022 => "ToolTip",
+        50023 => "Tree",
+        50024 => "TreeItem",
+        50025 => "Custom",
+        50026 => "Group",
+        50027 => "Thumb",
+        50028 => "DataGrid",
+        50029 => "DataItem",
+        50030 => "Document",
+        50031 => "SplitButton",
+        50032 => "Window",
+        50033 => "Pane",
+        50034 => "Header",
+        50035 => "HeaderItem",
+        50036 => "Table",
+        50037 => "TitleBar",
+        50038 => "Separator",
+        _ => $"Type{id}"
     };
 
     private static string Truncate(string s, int n) => s.Length <= n ? s : s[..n] + "…";

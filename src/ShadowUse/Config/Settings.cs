@@ -37,11 +37,20 @@ public sealed class ShadowSettings
             try
             {
                 if (File.Exists(path))
-                    return JsonSerializer.Deserialize<ShadowSettings>(File.ReadAllText(path)) ?? new ShadowSettings();
+                {
+                    var settings = JsonSerializer.Deserialize<ShadowSettings>(File.ReadAllText(path)) ?? new ShadowSettings();
+                    settings.Normalize();
+                    return settings;
+                }
             }
             catch { /* bad json → defaults */ }
         }
         return new ShadowSettings();
+    }
+
+    private void Normalize()
+    {
+        PostActionDelayMs = Math.Clamp(PostActionDelayMs, 0, 5_000);
     }
 
     private static IEnumerable<string> Candidates()

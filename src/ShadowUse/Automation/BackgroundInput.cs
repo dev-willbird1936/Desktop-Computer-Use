@@ -186,12 +186,17 @@ public sealed class BackgroundInput
             // appending. WM_GETTEXTLENGTH must be sent as a message (not GetWindowTextLength,
             // which skips messaging entirely for windows outside our process and returns a
             // stale/zero cached caption length) to find the real end offset first.
-            int len = (int)NativeMethods.SendMessageW(editHwnd, NativeMethods.WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero);
-            NativeMethods.SendMessageW(editHwnd, NativeMethods.EM_SETSEL, (IntPtr)len, (IntPtr)len);
-            var r = NativeMethods.SendMessageW(editHwnd, NativeMethods.EM_REPLACESEL, (IntPtr)1, text);
-            if (r == IntPtr.Zero) // EM_REPLACESEL returns 0 on success in most controls; some return non-zero
-                return new InputResult(true, "em_replacesel", $"hwnd=0x{editHwnd.ToInt64():X}");
-            return new InputResult(true, "em_replacesel", $"hwnd=0x{editHwnd.ToInt64():X} (rc={r})");
+            if (!TrySendMessageWithTimeout(editHwnd, NativeMethods.WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero, out var lengthResult))
+                return new InputResult(false, "em_replacesel", "target did not respond while reading text length");
+            int len = checked((int)lengthResult.ToInt64());
+            if (!TrySendMessageWithTimeout(editHwnd, NativeMethods.EM_SETSEL, (IntPtr)len, (IntPtr)len, out _))
+                return new InputResult(false, "em_replacesel", "target did not respond while setting text selection");
+            if (!TrySendMessageWithTimeout(editHwnd, NativeMethods.EM_REPLACESEL, (IntPtr)1, text, out var replaceResult))
+                return new InputResult(false, "em_replacesel", "target did not respond while replacing text");
+            return new InputResult(true, "em_replacesel",
+                replaceResult == IntPtr.Zero
+                    ? $"hwnd=0x{editHwnd.ToInt64():X}"
+                    : $"hwnd=0x{editHwnd.ToInt64():X} (rc={replaceResult})");
         }
 
         // Tier 2: key-event stream into a render widget (Chromium/Electron) — the DOM
@@ -300,7 +305,10 @@ public sealed class BackgroundInput
         try
         {
             var focused = uia.GetFocusedElement();
-            if (focused?.GetCurrentPattern(UiaIds.ValuePattern) is IUIAutomationValuePattern fvp
+            if (focused != null
+                && CanUseFocusedElement(root.CurrentProcessId, focused.CurrentProcessId)
+                && IsElementWithinRoot(uia, root, focused)
+                && focused.GetCurrentPattern(UiaIds.ValuePattern) is IUIAutomationValuePattern fvp
                 && fvp.CurrentIsReadOnly == 0)
                 return focused;
         }
@@ -321,6 +329,56 @@ public sealed class BackgroundInput
             catch { }
         }
         return null;
+    }
+
+    private const uint WindowMessageTimeoutMs = 1_000;
+
+    private static bool TrySendMessageWithTimeout(
+        IntPtr hwnd,
+        uint message,
+        IntPtr wParam,
+        IntPtr lParam,
+        out IntPtr result)
+        => NativeMethods.SendMessageTimeoutW(
+               hwnd,
+               message,
+               wParam,
+               lParam,
+               NativeMethods.SMTO_ABORTIFHUNG | NativeMethods.SMTO_ERRORONEXIT,
+               WindowMessageTimeoutMs,
+               out result) != IntPtr.Zero;
+
+    private static bool TrySendMessageWithTimeout(
+        IntPtr hwnd,
+        uint message,
+        IntPtr wParam,
+        string lParam,
+        out IntPtr result)
+        => NativeMethods.SendMessageTimeoutW(
+               hwnd,
+               message,
+               wParam,
+               lParam,
+               NativeMethods.SMTO_ABORTIFHUNG | NativeMethods.SMTO_ERRORONEXIT,
+               WindowMessageTimeoutMs,
+               out result) != IntPtr.Zero;
+
+    private static bool CanUseFocusedElement(int targetProcessId, int focusedProcessId)
+        => targetProcessId > 0 && targetProcessId == focusedProcessId;
+
+    private static bool IsElementWithinRoot(
+        IUIAutomation uia,
+        IUIAutomationElement root,
+        IUIAutomationElement candidate)
+    {
+        var walker = uia.ControlViewWalker;
+        IUIAutomationElement? current = candidate;
+        for (int depth = 0; current != null && depth < 128; depth++)
+        {
+            if (uia.CompareElements(current, root) != 0) return true;
+            current = walker.GetParentElement(current);
+        }
+        return false;
     }
 
     /// <summary>Find Chrome/Chromium's native omnibox accessibility element. The stable
@@ -490,10 +548,20 @@ public sealed class BackgroundInput
         var last = parts[^1].Trim();
         int vk = last switch
         {
-            "return" or "enter" => 0x0D, "tab" => 0x09, "esc" or "escape" => 0x1B,
-            "space" => 0x20, "back" or "backspace" => 0x08, "delete" => 0x2E,
-            "home" => 0x24, "end" => 0x23, "pageup" => 0x21, "pagedown" => 0x22,
-            "up" => 0x26, "down" => 0x28, "left" => 0x25, "right" => 0x27,
+            "return" or "enter" => 0x0D,
+            "tab" => 0x09,
+            "esc" or "escape" => 0x1B,
+            "space" => 0x20,
+            "back" or "backspace" => 0x08,
+            "delete" => 0x2E,
+            "home" => 0x24,
+            "end" => 0x23,
+            "pageup" => 0x21,
+            "pagedown" => 0x22,
+            "up" => 0x26,
+            "down" => 0x28,
+            "left" => 0x25,
+            "right" => 0x27,
             _ when last.Length == 1 && char.IsLetterOrDigit(last[0]) => char.ToUpperInvariant(last[0]),
             _ when last.StartsWith('f') && int.TryParse(last[1..], out var f) && f is >= 1 and <= 12 => 0x6F + f,
             _ => 0

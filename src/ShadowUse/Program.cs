@@ -78,8 +78,22 @@ internal static class Program
         try
         {
             using var t = new UiaThread();
-            var apps = t.InvokeAsync(() => System.Diagnostics.Process.GetProcesses()
-                .Count(p => { try { return p.MainWindowHandle != IntPtr.Zero; } catch { return false; } })).Result;
+            var apps = t.InvokeAsync(() =>
+            {
+                var processes = System.Diagnostics.Process.GetProcesses();
+                try
+                {
+                    return processes.Count(p =>
+                    {
+                        try { return p.MainWindowHandle != IntPtr.Zero; }
+                        catch { return false; }
+                    });
+                }
+                finally
+                {
+                    foreach (var process in processes) process.Dispose();
+                }
+            }).Result;
             Console.Error.WriteLine($"  UIA thread: OK ({apps} apps with windows)");
         }
         catch (Exception ex) { Console.Error.WriteLine($"  UIA thread: FAIL {ex.Message}"); return 1; }

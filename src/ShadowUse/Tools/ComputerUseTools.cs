@@ -51,7 +51,7 @@ public sealed class ComputerUseTools
         var apps = await _uia.ListAppsAsync(ct).ConfigureAwait(false);
         return new
         {
-            apps = apps.Select(a => new { name = a.Process.ProcessName, pid = a.Process.Id, title = a.Title }),
+            apps = apps.Select(a => new { name = a.ProcessName, pid = a.Pid, title = a.Title }),
             hint = "Next: get_app_state(app) to snapshot one of these."
         };
     }
@@ -63,6 +63,8 @@ public sealed class ComputerUseTools
         [Description("Max elements in tree")] int max_elements = 300,
         CancellationToken ct = default)
     {
+        var validationError = ToolValidation.ValidateMaxElements(max_elements);
+        if (validationError != null) return Error(validationError);
         var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
         var snap = await _uia.SnapshotAsync(target, maxNodes: Math.Max(100, max_elements * 3), ct: ct).ConfigureAwait(false);
         // Truncate for THIS response only — never mutate the cached snapshot's own element
@@ -80,8 +82,15 @@ public sealed class ComputerUseTools
             foreground_free = true,
             elements = limited.Select(e => new
             {
-                id = e.Id, type = e.ControlType, name = e.Name, automation_id = e.AutomationId,
-                x = e.X, y = e.Y, w = e.Width, h = e.Height, actions = e.Actions,
+                id = e.Id,
+                type = e.ControlType,
+                name = e.Name,
+                automation_id = e.AutomationId,
+                x = e.X,
+                y = e.Y,
+                w = e.Width,
+                h = e.Height,
+                actions = e.Actions,
                 value = string.IsNullOrEmpty(e.Value) ? null : e.Value,
             }),
             screenshot_png_base64 = img != null ? Convert.ToBase64String(img) : null,
@@ -99,20 +108,25 @@ public sealed class ComputerUseTools
         [Description("Click count (2 = double)")] int click_count = 1,
         CancellationToken ct = default)
     {
+        var validationError = ToolValidation.ValidateClick(button, click_count);
+        if (validationError != null) return Error(validationError);
         await _mutationLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             var err = DesktopError();
             if (err != null) return Error(err);
-            var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
+            FocusGuard? focusGuard = null;
+            uint targetProcessId = 0;
             try
             {
                 var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
+                targetProcessId = (uint)target.Pid;
+                focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
                 // Element ids belong to the exact HWND that produced their snapshot.
                 // Chromium can temporarily make a popup its process MainWindowHandle,
                 // so resolving the PID again is not a reliable element-cache key.
                 var cachedSnap = element_id != null
-                    ? _uia.GetSnapshotForPid(target.Process.Id)
+                    ? _uia.GetSnapshotForPid(target.Pid)
                     : _uia.GetSnapshot(target);
                 ElementInfo? info = null;
                 Interop.UIAutomationClient.IUIAutomationElement? element = null;
@@ -179,7 +193,8 @@ public sealed class ComputerUseTools
                     {
                         var originalRoot = new AppTarget
                         {
-                            Process = target.Process,
+                            Pid = target.Pid,
+                            ProcessName = target.ProcessName,
                             Hwnd = actionHwnd,
                             Title = snap.Title,
                         };
@@ -198,7 +213,7 @@ public sealed class ComputerUseTools
                 {
                     try
                     {
-                        var currentTarget = await _uia.ResolveAppAsync(target.Process.Id.ToString(), ct).ConfigureAwait(false);
+                        var currentTarget = await _uia.ResolveAppAsync(target.Pid.ToString(), ct).ConfigureAwait(false);
                         rootDisappeared |= currentTarget.Hwnd != actionHwnd;
                         after = await _uia.SnapshotAsync(currentTarget, ct: ct).ConfigureAwait(false);
                     }
@@ -250,7 +265,10 @@ public sealed class ComputerUseTools
                     hint = "Snapshot refreshed. If the UI changed a lot, call get_app_state for full detail."
                 };
             }
-            finally { focusGuard?.Restore(); }
+            finally
+            {
+                if (targetProcessId != 0) focusGuard?.Restore(targetProcessId);
+            }
         }
         finally { _mutationLock.Release(); }
     }
@@ -267,16 +285,22 @@ public sealed class ComputerUseTools
         {
             var err = DesktopError();
             if (err != null) return Error(err);
-            var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
+            FocusGuard? focusGuard = null;
+            uint targetProcessId = 0;
             try
             {
                 var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
+                targetProcessId = (uint)target.Pid;
+                focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
                 var result = await _input.TypeTextAsync(target.Hwnd, text, ct, allow_uia_fallback ?? _settings.AllowUiaTextFallback).ConfigureAwait(false);
                 await Task.Delay(_settings.PostActionDelayMs, ct).ConfigureAwait(false);
                 var after = await _uia.SnapshotAsync(target, ct: ct).ConfigureAwait(false);
                 return new { ok = result.Success, method = result.Method, revision = after.Revision };
             }
-            finally { focusGuard?.Restore(); }
+            finally
+            {
+                if (targetProcessId != 0) focusGuard?.Restore(targetProcessId);
+            }
         }
         finally { _mutationLock.Release(); }
     }
@@ -292,10 +316,13 @@ public sealed class ComputerUseTools
         {
             var err = DesktopError();
             if (err != null) return Error(err);
-            var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
+            FocusGuard? focusGuard = null;
+            uint targetProcessId = 0;
             try
             {
                 var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
+                targetProcessId = (uint)target.Pid;
+                focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
                 var result = await _input.PressKeyAsync(target.Hwnd, key, ct).ConfigureAwait(false);
                 return new
                 {
@@ -304,7 +331,10 @@ public sealed class ComputerUseTools
                     detail = string.IsNullOrEmpty(result.Detail) ? null : result.Detail
                 };
             }
-            finally { focusGuard?.Restore(); }
+            finally
+            {
+                if (targetProcessId != 0) focusGuard?.Restore(targetProcessId);
+            }
         }
         finally { _mutationLock.Release(); }
     }
@@ -317,27 +347,38 @@ public sealed class ComputerUseTools
         [Description("Pages to scroll")] double pages = 1.0,
         CancellationToken ct = default)
     {
+        var validationError = ToolValidation.ValidatePositiveFinite(pages, 100, nameof(pages));
+        if (validationError != null) return Error(validationError);
         await _mutationLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             var err = DesktopError();
             if (err != null) return Error(err);
-            var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
+            FocusGuard? focusGuard = null;
+            uint targetProcessId = 0;
             try
             {
                 var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
+                targetProcessId = (uint)target.Pid;
+                focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
                 var snap = _uia.GetSnapshot(target);
                 ElementInfo? info = null;
                 Interop.UIAutomationClient.IUIAutomationElement? element = null;
-                if (element_id != null && snap != null)
+                if (element_id != null)
                 {
-                    info = snap.Elements.FirstOrDefault(e => e.Id == element_id);
-                    if (info != null) element = await _uia.ResolveElementAsync(target.Hwnd, info, ct).ConfigureAwait(false);
+                    try { info = ResolveRequiredElement(snap, element_id); }
+                    catch (InvalidOperationException ex) { return Error(ex.Message); }
+                    element = await _uia.ResolveElementAsync(snap!.Hwnd, info, ct).ConfigureAwait(false);
+                    if (element == null)
+                        return Error($"Element '{element_id}' no longer exists. Re-run get_app_state.");
                 }
                 var result = await _input.ScrollAsync(target.Hwnd, element, info, direction, pages, ct).ConfigureAwait(false);
                 return new { ok = result.Success, method = result.Method, detail = result.Detail };
             }
-            finally { focusGuard?.Restore(); }
+            finally
+            {
+                if (targetProcessId != 0) focusGuard?.Restore(targetProcessId);
+            }
         }
         finally { _mutationLock.Release(); }
     }
@@ -372,7 +413,7 @@ public sealed class ComputerUseTools
                 var result = await _input.DragAsync(target.Hwnd, from_x, from_y, to_x, to_y, ct).ConfigureAwait(false);
                 return new { ok = result.Success, method = result.Method };
             }
-            finally { focusGuard?.Restore(); }
+            finally { focusGuard?.Restore((uint)target.Pid); }
         }
         finally { _mutationLock.Release(); }
     }
@@ -406,7 +447,7 @@ public sealed class ComputerUseTools
                 if (!result.Success) return Error(result.Detail);
                 return new { ok = true, method = result.Method };
             }
-            finally { focusGuard?.Restore(); }
+            finally { focusGuard?.Restore((uint)target.Pid); }
         }
         finally { _mutationLock.Release(); }
     }
@@ -419,6 +460,8 @@ public sealed class ComputerUseTools
         [Description("Timeout seconds")] double timeout_s = 10,
         CancellationToken ct = default)
     {
+        var validationError = ToolValidation.ValidatePositiveFinite(timeout_s, 300, nameof(timeout_s));
+        if (validationError != null) return Error(validationError);
         var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(timeout_s);
         while (DateTime.UtcNow < deadline)
@@ -482,7 +525,7 @@ public sealed class ComputerUseTools
                     _ => Error($"Unknown tool '{tool}'")
                 };
             }
-            catch (Exception ex) { r = Error(ex.Message); }
+            catch (Exception ex) when (!IsCallerCancellation(ex, ct)) { r = Error(ex.Message); }
             results.Add(new { step = i, tool, result = r });
             if (HasFailed(r) && stop_on_error)
                 return new { ok = false, stopped_at = i, results };
@@ -510,11 +553,24 @@ public sealed class ComputerUseTools
             apps_with_windows = apps.Length,
             overlay = "available (layered, click-through, capture-excluded)",
             input = "UIA patterns + window messages (no SendInput — focus-free)",
-            capture = "PrintWindow(PW_RENDERFULLCONTENT) → CopyFromScreen fallback"
+            capture = "PrintWindow(PW_RENDERFULLCONTENT); visible-screen fallback disabled by default"
         };
     }
 
     private static object Error(string message) => new { error = message };
+
+    private static bool IsCallerCancellation(Exception exception, CancellationToken cancellationToken)
+        => exception is OperationCanceledException && cancellationToken.IsCancellationRequested;
+
+    private static ElementInfo ResolveRequiredElement(Snapshot? snapshot, string elementId)
+    {
+        if (snapshot == null)
+            throw new InvalidOperationException(
+                "No cached snapshot for this app. Call get_app_state first.");
+        return snapshot.Elements.FirstOrDefault(element => element.Id == elementId)
+            ?? throw new InvalidOperationException(
+                $"Unknown element id '{elementId}' in snapshot r{snapshot.Revision}. Call get_app_state for fresh ids.");
+    }
 
     /// <summary>True if a tool result represents failure — either the {error:...} shape,
     /// or an explicit ok:false (e.g. wait_for's timeout return, which has no "error" field).</summary>

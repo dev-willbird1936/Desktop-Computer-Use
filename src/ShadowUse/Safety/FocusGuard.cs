@@ -44,11 +44,16 @@ internal sealed class FocusGuard
         return new FocusGuard(fg, focus, caret, tid);
     }
 
-    /// <summary>Restore foreground/focus/caret if the action moved them. No-op if nothing changed.</summary>
-    public void Restore()
+    /// <summary>Restore foreground/focus/caret only if the target process took foreground.</summary>
+    public void Restore(uint targetProcessId)
     {
         if (_foreground == IntPtr.Zero || !NativeMethods.IsWindow(_foreground)) return;
-        if (NativeMethods.GetForegroundWindow() == _foreground) return; // user's focus untouched
+        var currentForeground = NativeMethods.GetForegroundWindow();
+        uint currentProcessId = currentForeground != IntPtr.Zero
+            ? GetWindowProcessId(currentForeground)
+            : 0;
+        if (!ShouldRestoreFocus(_foreground, currentForeground, targetProcessId, currentProcessId))
+            return;
 
         uint cur = NativeMethods.GetCurrentThreadId();
 
@@ -58,7 +63,7 @@ internal sealed class FocusGuard
         // restoring TO, not the one that took it) grants no standing for that call.
         // SetFocus separately needs the calling thread attached to the window's OWNING
         // thread, which is _threadId. Both attaches are needed; they serve two different calls.
-        var thief = NativeMethods.GetForegroundWindow();
+        var thief = currentForeground;
         uint thiefTid = thief != IntPtr.Zero ? NativeMethods.GetWindowThreadProcessId(thief, out _) : 0;
 
         bool attachedThief = false, attachedOriginal = false;
@@ -80,4 +85,21 @@ internal sealed class FocusGuard
             if (attachedThief) NativeMethods.AttachThreadInput(cur, thiefTid, false);
         }
     }
+
+    private static uint GetWindowProcessId(IntPtr hwnd)
+    {
+        NativeMethods.GetWindowThreadProcessId(hwnd, out var processId);
+        return processId;
+    }
+
+    private static bool ShouldRestoreFocus(
+        IntPtr originalForeground,
+        IntPtr currentForeground,
+        uint targetProcessId,
+        uint currentProcessId)
+        => originalForeground != IntPtr.Zero
+           && currentForeground != IntPtr.Zero
+           && currentForeground != originalForeground
+           && targetProcessId != 0
+           && currentProcessId == targetProcessId;
 }

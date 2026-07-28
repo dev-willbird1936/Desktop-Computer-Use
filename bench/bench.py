@@ -4,15 +4,29 @@
 Usage: python bench/bench.py [test-id-substring ...]
 Writes evidence to C:/tmp/dcu-bench/ and prints a report card.
 """
-import ctypes, json, os, re, subprocess, sys, time, base64, threading, http.server, functools
+import ctypes, json, os, re, subprocess, sys, time, base64, threading, http.server, functools, queue
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXE = os.environ.get("DCU_EXE", os.path.join(ROOT, "publish", "dcu.exe"))
 EVID = r"C:\tmp\dcu-bench"
 PORT = 8931
+MCP_CALL_TIMEOUT_S = 15
 u32 = ctypes.windll.user32
 k32 = ctypes.windll.kernel32
 os.makedirs(EVID, exist_ok=True)
+
+
+class THREADENTRY32(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", ctypes.c_ulong),
+        ("cntUsage", ctypes.c_ulong),
+        ("th32ThreadID", ctypes.c_ulong),
+        ("th32OwnerProcessID", ctypes.c_ulong),
+        ("tpBasePri", ctypes.c_long),
+        ("tpDeltaPri", ctypes.c_long),
+        ("dwFlags", ctypes.c_ulong),
+    ]
+
 
 # ---------------- infra ----------------
 
@@ -21,13 +35,31 @@ class Mcp:
         self.p = subprocess.Popen([EXE], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=subprocess.DEVNULL, text=True, bufsize=1)
         self.n = 1
+        self._responses = queue.Queue()
+        self._reader = threading.Thread(target=self._read_stdout, daemon=True)
+        self._reader.start()
+    def _read_stdout(self):
+        for line in self.p.stdout:
+            self._responses.put(line)
+        self._responses.put(None)
+    def _read_response(self, timeout_s):
+        try:
+            line = self._responses.get(timeout=timeout_s)
+        except queue.Empty as ex:
+            raise TimeoutError(f"MCP response timed out after {timeout_s:.1f}s") from ex
+        if line is None:
+            raise RuntimeError("dcu closed stdout")
+        return line
     def call(self, method, params=None):
         rid = self.n; self.n += 1
         self.p.stdin.write(json.dumps({"jsonrpc":"2.0","id":rid,"method":method,"params":params or {}})+"\n")
         self.p.stdin.flush()
+        deadline = time.monotonic() + MCP_CALL_TIMEOUT_S
         while True:
-            line = self.p.stdout.readline()
-            if not line: raise RuntimeError("dcu closed stdout")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(f"MCP call '{method}' timed out after {MCP_CALL_TIMEOUT_S}s")
+            line = self._read_response(remaining)
             m = json.loads(line)
             if m.get("id") == rid: return m
     def notify(self, method):
@@ -348,21 +380,27 @@ def t31(ctx):
     THREAD_SUSPEND_RESUME = 0x0002
     threads = []
     hsnap = ctypes.windll.kernel32.CreateToolhelp32Snapshot(4, 0)
-    class TE32(ctypes.Structure):
-        _fields_ = [("cnt", ctypes.c_ulong), ("tid", ctypes.c_ulong), ("owner", ctypes.c_ulong), ("pad", ctypes.c_ulong * 3)]
-    te = TE32(); te.cnt = ctypes.sizeof(TE32)
+    te = THREADENTRY32()
+    te.dwSize = ctypes.sizeof(THREADENTRY32)
     if ctypes.windll.kernel32.Thread32First(hsnap, ctypes.byref(te)):
         while True:
-            if te.owner == pid.value:
-                h = ctypes.windll.kernel32.OpenThread(THREAD_SUSPEND_RESUME, False, te.tid)
+            if te.th32OwnerProcessID == pid.value:
+                h = ctypes.windll.kernel32.OpenThread(
+                    THREAD_SUSPEND_RESUME, False, te.th32ThreadID
+                )
                 if h: ctypes.windll.kernel32.SuspendThread(h); threads.append(h)
             if not ctypes.windll.kernel32.Thread32Next(hsnap, ctypes.byref(te)): break
     ctypes.windll.kernel32.CloseHandle(hsnap)
+    if not threads:
+        return fail_result("could not suspend any target threads")
     t0 = time.time()
-    r = ctx.mcp.tool("type_text", {"app": "dcu-bench-notepad", "text": "into the void"})
+    try:
+        r = ctx.mcp.tool("type_text", {"app": "dcu-bench-notepad", "text": "into the void"})
+    finally:
+        for h in threads:
+            ctypes.windll.kernel32.ResumeThread(h)
+            ctypes.windll.kernel32.CloseHandle(h)
     dt = time.time() - t0
-    for h in threads:
-        ctypes.windll.kernel32.ResumeThread(h); ctypes.windll.kernel32.CloseHandle(h)
     alive = ctx.mcp.tool("health_check")
     return ok(dt < 35 and alive.get("ok"), f"hung action returned in {dt:.1f}s, server alive")
 
@@ -469,7 +507,7 @@ def t42(ctx):
     tools = [t["name"] for t in r.get("result", {}).get("tools", [])]
     bad = ctx.mcp.tool("click", {"app": "chrome", "button": "purple"})
     bad2 = ctx.mcp.tool("scroll", {"app": "chrome", "direction": "sideways"})
-    okk = len(tools) >= 10 and ("error" in bad or "ok" in bad) and ("error" in bad2 or "ok" in bad2)
+    okk = len(tools) >= 10 and "error" in bad and "error" in bad2
     return ok(okk, f"{len(tools)} tools, bad-button→{list(bad)[:1]}, bad-dir→{list(bad2)[:1]}")
 
 @test("43", "execute_sequence stops on error")

@@ -17,6 +17,7 @@ publish/
 # Python bytecode cache
 __pycache__/
 *.pyc
+TestResults/
 
 # ad-hoc scratch publish output (debug builds, not for release)
 publish-*/

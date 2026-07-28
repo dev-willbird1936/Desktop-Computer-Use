@@ -10,19 +10,28 @@ namespace ShadowUse.Capture;
 
 /// <summary>
 /// Window capture: PrintWindow(PW_RENDERFULLCONTENT) first — captures the window's own
-/// backing surface, so it works even when the window is occluded by other windows —
-/// then GDI CopyFromScreen (visible-region BitBlt) as fallback.
+/// backing surface, so it works even when the window is occluded by other windows.
+/// Visible-screen fallback is opt-in because it can capture an unrelated occluding app.
 /// Optionally overlays Set-of-Marks labels for snapshot elements.
 /// </summary>
 internal static class ScreenshotService
 {
+    private static int _printWindowWorkerBusy;
+
     /// <summary>Capture a window as PNG bytes. Returns null if all methods fail.</summary>
-    public static byte[]? CaptureWindow(IntPtr hwnd, IReadOnlyList<ElementInfo>? annotateWith = null, int maxWidth = 1280)
+    public static byte[]? CaptureWindow(
+        IntPtr hwnd,
+        IReadOnlyList<ElementInfo>? annotateWith = null,
+        int maxWidth = 1280,
+        bool allowScreenFallback = false)
     {
         if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
             return null;
 
-        Bitmap? bmp = TryPrintWindow(hwnd, rect) ?? TryCopyFromScreen(rect);
+        Bitmap? bmp = SelectWindowCapture(
+            TryPrintWindow(hwnd, rect),
+            () => TryCopyFromScreen(rect),
+            allowScreenFallback);
         if (bmp == null) return null;
 
         try
@@ -59,14 +68,14 @@ internal static class ScreenshotService
 
     /// <summary>PrintWindow sends WM_PRINT/WM_PRINTCLIENT to hwnd and blocks until it's
     /// handled — a hung target's message queue can wedge this call indefinitely. Run it on
-    /// a worker with a timeout so a hung app degrades to CopyFromScreen instead of hanging
-    /// the whole get_app_state call. If it does time out, the worker thread is abandoned
-    /// still blocked inside PrintWindow (bounded degradation is better than an unbounded hang).</summary>
+    /// a worker with a timeout so get_app_state can return a clean null result. Only one
+    /// worker may remain blocked, and any bitmap returned after the timeout is disposed by
+    /// a continuation.</summary>
     private static Bitmap? TryPrintWindow(IntPtr hwnd, NativeMethods.RECT rect)
     {
         try
         {
-            var task = Task.Run(() =>
+            return RunPrintWindowWorker(() =>
             {
                 var bmp = new Bitmap(rect.Width, rect.Height, PixelFormat.Format32bppArgb);
                 using var g = Graphics.FromImage(bmp);
@@ -76,10 +85,46 @@ internal static class ScreenshotService
                 finally { g.ReleaseHdc(hdc); }
                 if (!ok || IsBlank(bmp)) { bmp.Dispose(); return null; }
                 return bmp;
-            });
-            return task.Wait(TimeSpan.FromSeconds(2)) ? task.Result : null;
+            }, 2_000);
         }
         catch { return null; }
+    }
+
+    private static Bitmap? RunPrintWindowWorker(Func<Bitmap?> capture, int timeoutMs)
+    {
+        if (Interlocked.CompareExchange(ref _printWindowWorkerBusy, 1, 0) != 0)
+            return null;
+
+        Task<Bitmap?> task;
+        try
+        {
+            task = Task.Run(() =>
+            {
+                try { return capture(); }
+                finally { Interlocked.Exchange(ref _printWindowWorkerBusy, 0); }
+            });
+        }
+        catch
+        {
+            Interlocked.Exchange(ref _printWindowWorkerBusy, 0);
+            throw;
+        }
+
+        if (task.Wait(TimeSpan.FromMilliseconds(timeoutMs)))
+            return task.GetAwaiter().GetResult();
+
+        _ = task.ContinueWith(
+            completed =>
+            {
+                if (completed.Status == TaskStatus.RanToCompletion)
+                    completed.Result?.Dispose();
+                else
+                    _ = completed.Exception;
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        return null;
     }
 
     private static Bitmap? TryCopyFromScreen(NativeMethods.RECT rect)
@@ -94,6 +139,12 @@ internal static class ScreenshotService
         }
         catch { return null; }
     }
+
+    private static Bitmap? SelectWindowCapture(
+        Bitmap? printWindowCapture,
+        Func<Bitmap?> screenCapture,
+        bool allowScreenFallback)
+        => printWindowCapture ?? (allowScreenFallback ? screenCapture() : null);
 
     private static bool IsBlank(Bitmap bmp)
     {

@@ -6,6 +6,7 @@ import json, os, webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PORT = 8737
+MAX_BODY_BYTES = 8_192
 APPDATA_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "shadow-use")
 APPDATA_SETTINGS = os.path.join(APPDATA_DIR, "settings.json")
 EXE_SETTINGS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "publish", "settings.json")
@@ -88,6 +89,23 @@ def load_settings():
     return dict(DEFAULTS)
 
 
+def clean_settings(data):
+    if not isinstance(data, dict):
+        raise ValueError("settings payload must be an object")
+    clean = {}
+    for key, default in DEFAULTS.items():
+        value = data.get(key, default)
+        if key == "PostActionDelayMs":
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError("PostActionDelayMs must be an integer")
+            clean[key] = max(0, min(5_000, value))
+        else:
+            if not isinstance(value, bool):
+                raise ValueError(f"{key} must be a boolean")
+            clean[key] = value
+    return clean
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
@@ -109,16 +127,22 @@ class Handler(BaseHTTPRequestHandler):
         # the request) — reject anything not claiming to come from this server's own origin,
         # so an unrelated page can't silently flip these safety toggles while this is running.
         origin = self.headers.get("Origin", "")
-        if origin and origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
+        if origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
             return self._send(403, b'{"ok":false,"error":"bad origin"}', "application/json")
+        if self.headers.get_content_type() != "application/json":
+            return self._send(415, b'{"ok":false,"error":"application/json required"}', "application/json")
         try:
-            data = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-            clean = {k: (int(data.get(k, DEFAULTS[k])) if k == "PostActionDelayMs"
-                         else bool(data.get(k, DEFAULTS[k]))) for k in DEFAULTS}
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > MAX_BODY_BYTES:
+                return self._send(413, b'{"ok":false,"error":"invalid body size"}', "application/json")
+            data = json.loads(self.rfile.read(length))
+            clean = clean_settings(data)
             os.makedirs(APPDATA_DIR, exist_ok=True)
             with open(APPDATA_SETTINGS, "w", encoding="utf-8") as f:
                 json.dump(clean, f, indent=2)
             self._send(200, b'{"ok":true}', "application/json")
+        except (ValueError, json.JSONDecodeError) as ex:
+            self._send(400, json.dumps({"ok": False, "error": str(ex)}).encode(), "application/json")
         except Exception as ex:
             self._send(500, json.dumps({"ok": False, "error": str(ex)}).encode(), "application/json")
 
@@ -126,6 +150,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
