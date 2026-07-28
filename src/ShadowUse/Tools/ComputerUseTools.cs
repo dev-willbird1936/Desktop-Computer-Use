@@ -51,14 +51,21 @@ public sealed class ComputerUseTools
         var apps = await _uia.ListAppsAsync(ct).ConfigureAwait(false);
         return new
         {
-            apps = apps.Select(a => new { name = a.ProcessName, pid = a.Pid, title = a.Title }),
-            hint = "Next: get_app_state(app) to snapshot one of these."
+            apps = apps.Select(a => new
+            {
+                name = a.ProcessName,
+                pid = a.Pid,
+                window_id = a.WindowId,
+                hwnd = $"0x{a.Hwnd.ToInt64():X}",
+                title = a.Title,
+            }),
+            hint = "Use window_id when one process owns multiple windows. Next: get_app_state(app)."
         };
     }
 
     [McpServerTool(Name = "get_app_state"), Description("Snapshot an app's accessibility tree: interactive elements with stable ids, their frames, and supported actions. Optionally includes an annotated screenshot (Set-of-Marks labels matching element ids). Works on background/occluded windows.")]
     public async Task<object> GetAppState(
-        [Description("App name, substring of title, or pid")] string app,
+        [Description("App name, title substring, PID, or window_id")] string app,
         [Description("Include annotated screenshot image")] bool include_screenshot = true,
         [Description("Max elements in tree")] int max_elements = 300,
         CancellationToken ct = default)
@@ -100,7 +107,7 @@ public sealed class ComputerUseTools
 
     [McpServerTool(Name = "click"), Description("Focus-free click. Prefer element_id from the latest snapshot; or use screen x,y. Uses UIA Invoke/Toggle/Select patterns when available (left clicks), else posts window messages. Never moves the real cursor or changes focus.")]
     public async Task<object> Click(
-        [Description("App name, substring of title, or pid")] string app,
+        [Description("App name, title substring, PID, or window_id")] string app,
         [Description("Element id from get_app_state, e.g. 'e12'")] string? element_id = null,
         [Description("Screen X (if no element_id)")] int? x = null,
         [Description("Screen Y (if no element_id)")] int? y = null,
@@ -126,12 +133,15 @@ public sealed class ComputerUseTools
                 // Chromium can temporarily make a popup its process MainWindowHandle,
                 // so resolving the PID again is not a reliable element-cache key.
                 var cachedSnap = element_id != null
-                    ? _uia.GetSnapshotForPid(target.Pid)
+                    ? _uia.GetSnapshotForElement(target, element_id)
                     : _uia.GetSnapshot(target);
                 ElementInfo? info = null;
                 Interop.UIAutomationClient.IUIAutomationElement? element = null;
+                ElementFrame? currentFrame = null;
                 Snapshot snap;
                 IntPtr actionHwnd = target.Hwnd;
+                int? actionX = x;
+                int? actionY = y;
 
                 if (element_id != null)
                 {
@@ -151,6 +161,11 @@ public sealed class ComputerUseTools
                     element = await _uia.ResolveElementAsync(actionHwnd, info, ct).ConfigureAwait(false);
                     if (element == null)
                         return Error($"Element '{element_id}' no longer exists at its last known position. Re-run get_app_state.");
+                    currentFrame = await _uia.GetElementFrameAsync(element, ct).ConfigureAwait(false);
+                    if (currentFrame == null)
+                        return Error($"Element '{element_id}' no longer has usable screen bounds. Re-run get_app_state.");
+                    actionX = currentFrame.Value.CenterX;
+                    actionY = currentFrame.Value.CenterY;
                 }
                 else
                 {
@@ -161,6 +176,15 @@ public sealed class ComputerUseTools
                         err = Guard.CheckBounds(snap, target.Hwnd);
                         if (err != null) return Error(err);
                     }
+                    if (!NativeMethods.GetWindowRect(target.Hwnd, out var currentBounds))
+                        return Error("Target window no longer exists; call get_app_state to re-resolve.");
+                    var rebased = WindowCoordinateMapper.RebaseFromSnapshot(
+                        snap.Bounds,
+                        currentBounds,
+                        x.Value,
+                        y.Value);
+                    actionX = rebased.X;
+                    actionY = rebased.Y;
                 }
 
                 var btn = button.ToLowerInvariant() switch
@@ -171,14 +195,14 @@ public sealed class ComputerUseTools
                 };
 
                 // Cosmetic virtual cursor — show the user where the action lands
-                int vx = x ?? info!.ScreenX + info.Width / 2;
-                int vy = y ?? info!.ScreenY + info.Height / 2;
+                int vx = actionX ?? throw new InvalidOperationException("Click X coordinate was not resolved.");
+                int vy = actionY ?? throw new InvalidOperationException("Click Y coordinate was not resolved.");
                 Ghost(vx, vy, pulse: true);
                 await Task.Delay(140, ct).ConfigureAwait(false); // let the pulse be visible
 
                 BackgroundInput.InputResult result = element_id != null
-                    ? await _input.ClickElementAsync(actionHwnd, element, info, btn, click_count, ct).ConfigureAwait(false)
-                    : await _input.ClickAtAsync(actionHwnd, x!.Value, y!.Value, btn, click_count, ct).ConfigureAwait(false);
+                    ? await _input.ClickElementAsync(actionHwnd, element, info, btn, click_count, ct, currentFrame).ConfigureAwait(false)
+                    : await _input.ClickAtAsync(actionHwnd, vx, vy, btn, click_count, ct).ConfigureAwait(false);
 
                 if (!result.Success) return Error($"Click failed: {result.Detail}");
 
@@ -225,7 +249,7 @@ public sealed class ComputerUseTools
 
                 bool elementDisappeared = info != null && (rootDisappeared ||
                     (after != null && !ContainsRuntimeId(after, info.RuntimeId)));
-                bool stateChanged = after != null && HasObservableDelta(snap, after);
+                bool stateChanged = after != null && HasActionDelta(snap, after);
                 bool expansionObserved = result.Method == "uia_expand"
                     && !rootDisappeared
                     && !elementDisappeared
@@ -275,7 +299,7 @@ public sealed class ComputerUseTools
 
     [McpServerTool(Name = "type_text"), Description("Focus-free text entry into an app. Tries the edit control's EM_REPLACESEL (no focus needed), then WM_CHAR stream. Never steals keyboard focus; the user can keep typing elsewhere.")]
     public async Task<object> TypeText(
-        [Description("App name, substring of title, or pid")] string app,
+        [Description("App name, title substring, PID, or window_id")] string app,
         [Description("Text to enter")] string text,
         [Description("Allow UIA SetValue append (default: settings file, on unless disabled)")] bool? allow_uia_fallback = null,
         CancellationToken ct = default)
@@ -307,7 +331,7 @@ public sealed class ComputerUseTools
 
     [McpServerTool(Name = "press_key"), Description("Focus-free key press (e.g. 'Return', 'ctrl+s', 'F5', 'Tab') posted to the app's window. Does not move keyboard focus.")]
     public async Task<object> PressKey(
-        [Description("App name, substring of title, or pid")] string app,
+        [Description("App name, title substring, PID, or window_id")] string app,
         [Description("Key: name, char, or modifier+key (ctrl/alt/shift/win)")] string key,
         CancellationToken ct = default)
     {
@@ -341,7 +365,7 @@ public sealed class ComputerUseTools
 
     [McpServerTool(Name = "scroll"), Description("Focus-free scroll. UIA ScrollPattern first, wheel messages as fallback.")]
     public async Task<object> Scroll(
-        [Description("App name, substring of title, or pid")] string app,
+        [Description("App name, title substring, PID, or window_id")] string app,
         [Description("up | down | left | right")] string direction,
         [Description("Element id to scroll within (optional)")] string? element_id = null,
         [Description("Pages to scroll")] double pages = 1.0,
@@ -361,18 +385,35 @@ public sealed class ComputerUseTools
                 var target = await _uia.ResolveAppAsync(app, ct).ConfigureAwait(false);
                 targetProcessId = (uint)target.Pid;
                 focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
-                var snap = _uia.GetSnapshot(target);
+                var snap = element_id != null
+                    ? _uia.GetSnapshotForElement(target, element_id)
+                    : _uia.GetSnapshot(target);
                 ElementInfo? info = null;
                 Interop.UIAutomationClient.IUIAutomationElement? element = null;
+                ElementFrame? currentFrame = null;
+                IntPtr actionHwnd = target.Hwnd;
                 if (element_id != null)
                 {
                     try { info = ResolveRequiredElement(snap, element_id); }
                     catch (InvalidOperationException ex) { return Error(ex.Message); }
-                    element = await _uia.ResolveElementAsync(snap!.Hwnd, info, ct).ConfigureAwait(false);
+                    actionHwnd = snap!.Hwnd;
+                    if (!NativeMethods.IsWindow(actionHwnd))
+                        return Error($"Element '{element_id}' belonged to a window that no longer exists. Re-run get_app_state.");
+                    element = await _uia.ResolveElementAsync(actionHwnd, info, ct).ConfigureAwait(false);
                     if (element == null)
                         return Error($"Element '{element_id}' no longer exists. Re-run get_app_state.");
+                    currentFrame = await _uia.GetElementFrameAsync(element, ct).ConfigureAwait(false);
+                    if (currentFrame == null)
+                        return Error($"Element '{element_id}' no longer has usable screen bounds. Re-run get_app_state.");
                 }
-                var result = await _input.ScrollAsync(target.Hwnd, element, info, direction, pages, ct).ConfigureAwait(false);
+                var result = await _input.ScrollAsync(
+                    actionHwnd,
+                    element,
+                    info,
+                    direction,
+                    pages,
+                    ct,
+                    currentFrame).ConfigureAwait(false);
                 return new { ok = result.Success, method = result.Method, detail = result.Detail };
             }
             finally
@@ -385,7 +426,7 @@ public sealed class ComputerUseTools
 
     [McpServerTool(Name = "drag"), Description("Focus-free drag between two screen points via window messages. Real cursor untouched.")]
     public async Task<object> Drag(
-        [Description("App name, substring of title, or pid")] string app,
+        [Description("App name, title substring, PID, or window_id")] string app,
         [Description("From screen X")] int from_x,
         [Description("From screen Y")] int from_y,
         [Description("To screen X")] int to_x,
@@ -404,13 +445,42 @@ public sealed class ComputerUseTools
                 err = Guard.CheckBounds(snap, target.Hwnd);
                 if (err != null) return Error(err);
             }
+            int actionFromX = from_x;
+            int actionFromY = from_y;
+            int actionToX = to_x;
+            int actionToY = to_y;
+            if (snap != null)
+            {
+                if (!NativeMethods.GetWindowRect(target.Hwnd, out var currentBounds))
+                    return Error("Target window no longer exists; call get_app_state to re-resolve.");
+                var rebasedFrom = WindowCoordinateMapper.RebaseFromSnapshot(
+                    snap.Bounds,
+                    currentBounds,
+                    from_x,
+                    from_y);
+                var rebasedTo = WindowCoordinateMapper.RebaseFromSnapshot(
+                    snap.Bounds,
+                    currentBounds,
+                    to_x,
+                    to_y);
+                actionFromX = rebasedFrom.X;
+                actionFromY = rebasedFrom.Y;
+                actionToX = rebasedTo.X;
+                actionToY = rebasedTo.Y;
+            }
             var focusGuard = _settings.EnableFocusGuard ? FocusGuard.Capture() : null;
             try
             {
-                Ghost(from_x, from_y);
+                Ghost(actionFromX, actionFromY);
                 await Task.Delay(_settings.PostActionDelayMs, ct).ConfigureAwait(false);
-                Ghost(to_x, to_y);
-                var result = await _input.DragAsync(target.Hwnd, from_x, from_y, to_x, to_y, ct).ConfigureAwait(false);
+                Ghost(actionToX, actionToY);
+                var result = await _input.DragAsync(
+                    target.Hwnd,
+                    actionFromX,
+                    actionFromY,
+                    actionToX,
+                    actionToY,
+                    ct).ConfigureAwait(false);
                 return new { ok = result.Success, method = result.Method };
             }
             finally { focusGuard?.Restore((uint)target.Pid); }
@@ -420,7 +490,7 @@ public sealed class ComputerUseTools
 
     [McpServerTool(Name = "set_value"), Description("Set an element's value directly via UIA (edits, sliders, toggles with value 'true'/'false').")]
     public async Task<object> SetValue(
-        [Description("App name, substring of title, or pid")] string app,
+        [Description("App name, title substring, PID, or window_id")] string app,
         [Description("Element id from get_app_state")] string element_id,
         [Description("Value to set")] string value,
         CancellationToken ct = default)
@@ -454,7 +524,7 @@ public sealed class ComputerUseTools
 
     [McpServerTool(Name = "wait_for"), Description("Server-side wait: polls until text appears in the app (or an element with that name exists), or the window title changes. Avoids snapshot round-trips.")]
     public async Task<object> WaitFor(
-        [Description("App name, substring of title, or pid")] string app,
+        [Description("App name, title substring, PID, or window_id")] string app,
         [Description("text_exists | element_exists | window_active")] string condition,
         [Description("Text/element name to wait for")] string? text = null,
         [Description("Timeout seconds")] double timeout_s = 10,
@@ -489,7 +559,7 @@ public sealed class ComputerUseTools
 
     [McpServerTool(Name = "execute_sequence"), Description("Run a batch of actions server-side in order. Steps: [{\"tool\":\"click\",\"args\":{...}}, ...]. Supports click, type_text, press_key, scroll, drag, set_value, wait_for. Stops on first error unless stop_on_error=false.")]
     public async Task<object> ExecuteSequence(
-        [Description("App name, substring of title, or pid")] string app,
+        [Description("App name, title substring, PID, or window_id")] string app,
         [Description("JSON array of steps: [{\"tool\":\"click\",\"args\":{\"element_id\":\"e3\"}}, ...]")] string steps_json,
         [Description("Stop on first failed step")] bool stop_on_error = true,
         CancellationToken ct = default)
@@ -606,7 +676,7 @@ public sealed class ComputerUseTools
             && !priorRuntimeIds.Contains(Key(element)));
     }
 
-    private static bool HasObservableDelta(Snapshot before, Snapshot after)
+    private static bool HasActionDelta(Snapshot before, Snapshot after)
     {
         static string Key(ElementInfo element) => string.Join(",", element.RuntimeId);
         var beforeByRuntimeId = before.Elements.ToDictionary(Key);
@@ -620,10 +690,6 @@ public sealed class ComputerUseTools
                 || oldElement.Value != newElement.Value
                 || oldElement.ControlType != newElement.ControlType
                 || oldElement.AutomationId != newElement.AutomationId
-                || oldElement.X != newElement.X
-                || oldElement.Y != newElement.Y
-                || oldElement.Width != newElement.Width
-                || oldElement.Height != newElement.Height
                 || !oldElement.Actions.SequenceEqual(newElement.Actions))
                 return true;
         }

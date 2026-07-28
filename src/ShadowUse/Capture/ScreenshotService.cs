@@ -37,7 +37,7 @@ internal static class ScreenshotService
         try
         {
             if (annotateWith != null && annotateWith.Count > 0)
-                Annotate(bmp, annotateWith, rect);
+                Annotate(bmp, annotateWith);
 
             if (bmp.Width > maxWidth)
                 bmp = Scale(bmp, maxWidth);
@@ -156,7 +156,9 @@ internal static class ScreenshotService
         return true;
     }
 
-    private static void Annotate(Bitmap bmp, IReadOnlyList<ElementInfo> elements, NativeMethods.RECT windowRect)
+    private static Point GetAnnotationPoint(ElementInfo element) => new(element.X, element.Y);
+
+    private static void Annotate(Bitmap bmp, IReadOnlyList<ElementInfo> elements)
     {
         using var g = Graphics.FromImage(bmp);
         g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -170,7 +172,8 @@ internal static class ScreenshotService
         foreach (var el in elements)
         {
             var color = palette[i++ % palette.Length];
-            int x = el.ScreenX - windowRect.Left, y = el.ScreenY - windowRect.Top;
+            var point = GetAnnotationPoint(el);
+            int x = point.X, y = point.Y;
             using var pen = new Pen(color, 2);
             g.DrawRectangle(pen, x, y, el.Width, el.Height);
             var label = el.Id;

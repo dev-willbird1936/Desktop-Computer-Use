@@ -2,6 +2,7 @@
 // Licensed under MIT. See LICENSE. Keep this notice when redistributing.
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using Interop.UIAutomationClient;
 using ShadowUse.Native;
 
@@ -21,6 +22,17 @@ public sealed class ElementInfo
     public int X, Y, Width, Height;         // window-relative frame
     public int ScreenX, ScreenY;            // absolute frame origin
     public string[] Actions = [];
+}
+
+public readonly record struct ElementFrame(
+    int ScreenX,
+    int ScreenY,
+    int Width,
+    int Height,
+    int NativeWindowHandle)
+{
+    public int CenterX => ScreenX + Width / 2;
+    public int CenterY => ScreenY + Height / 2;
 }
 
 public sealed class Snapshot
@@ -43,6 +55,39 @@ public sealed class AppTarget
     public required string ProcessName;
     public required IntPtr Hwnd;
     public required string Title;
+    public string WindowId => $"{Pid}:0x{Hwnd.ToInt64():X}";
+}
+
+internal sealed class SnapshotCache
+{
+    private readonly ConcurrentDictionary<IntPtr, Snapshot> _byWindow = new();
+
+    public void Store(Snapshot snapshot) => _byWindow[snapshot.Hwnd] = snapshot;
+
+    public void RemoveInvalidWindows(Func<IntPtr, bool> isWindow)
+    {
+        foreach (var hwnd in _byWindow.Keys)
+            if (!isWindow(hwnd))
+                _byWindow.TryRemove(hwnd, out _);
+    }
+
+    public Snapshot? GetForTarget(AppTarget target)
+        => _byWindow.TryGetValue(target.Hwnd, out var snapshot)
+            && snapshot.Pid == target.Pid
+            ? snapshot
+            : null;
+
+    public Snapshot? GetForElement(AppTarget target, string elementId)
+    {
+        var targetSnapshot = GetForTarget(target);
+        if (targetSnapshot != null)
+            return targetSnapshot.Elements.Any(element => element.Id == elementId)
+                ? targetSnapshot
+                : null;
+        return _byWindow.Values.SingleOrDefault(snapshot =>
+            snapshot.Pid == target.Pid
+            && snapshot.Elements.Any(element => element.Id == elementId));
+    }
 }
 
 /// <summary>
@@ -52,7 +97,7 @@ public sealed class AppTarget
 public sealed class UiaService
 {
     private readonly UiaThread _uia;
-    private readonly ConcurrentDictionary<string, Snapshot> _snapshots = new();
+    private readonly SnapshotCache _snapshots = new();
     private int _revision;
     private int _elementCounter;
 
@@ -70,25 +115,42 @@ public sealed class UiaService
         => _uia.InvokeAsync(() =>
         {
             var list = new List<AppTarget>();
-            foreach (var p in Process.GetProcesses())
+            var processNames = new Dictionary<int, string>();
+            NativeMethods.EnumWindows((hwnd, _) =>
             {
+                if (!NativeMethods.IsWindowVisible(hwnd)) return true;
+                if (NativeMethods.DwmGetWindowAttribute(
+                        hwnd,
+                        NativeMethods.DWMWA_CLOAKED,
+                        out int cloaked,
+                        sizeof(int)) == 0
+                    && cloaked != 0)
+                    return true;
+                var title = NativeMethods.GetWindowTextString(hwnd);
+                if (string.IsNullOrWhiteSpace(title)) return true;
+                NativeMethods.GetWindowThreadProcessId(hwnd, out var rawPid);
+                int pid = unchecked((int)rawPid);
+                if (pid <= 0) return true;
                 try
                 {
-                    var hwnd = p.MainWindowHandle;
-                    if (hwnd == IntPtr.Zero) continue;
-                    var title = p.MainWindowTitle;
-                    if (string.IsNullOrWhiteSpace(title)) continue;
+                    if (!processNames.TryGetValue(pid, out var processName))
+                    {
+                        using var process = Process.GetProcessById(pid);
+                        processName = process.ProcessName;
+                        processNames[pid] = processName;
+                    }
                     list.Add(new AppTarget
                     {
-                        Pid = p.Id,
-                        ProcessName = p.ProcessName,
+                        Pid = pid,
+                        ProcessName = processName,
                         Hwnd = hwnd,
                         Title = title,
                     });
                 }
-                catch { /* process exited */ }
-                finally { p.Dispose(); }
-            }
+                catch { /* process exited or is inaccessible */ }
+                return true;
+            }, IntPtr.Zero);
+            _snapshots.RemoveInvalidWindows(NativeMethods.IsWindow);
             return list.ToArray();
         }, ct);
 
@@ -101,8 +163,10 @@ public sealed class UiaService
     private static AppTarget SelectApp(AppTarget[] apps, string app)
     {
         AppTarget? match = null;
-        if (int.TryParse(app, out var pid))
-            match = apps.FirstOrDefault(a => a.Pid == pid);
+        if (TryParseWindowId(app, out var windowPid, out var windowHandle))
+            match = apps.SingleOrDefault(a => a.Pid == windowPid && a.Hwnd == windowHandle);
+        else if (int.TryParse(app, out var pid))
+            match = SelectSingle(apps.Where(a => a.Pid == pid));
         var appNoExeSuffix = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app[..^4] : app;
         if (match == null)
         {
@@ -122,9 +186,26 @@ public sealed class UiaService
             var matches = candidates.ToArray();
             if (matches.Length > 1)
                 throw new InvalidOperationException(
-                    $"App selector '{app}' is ambiguous. Use a PID: {string.Join(", ", matches.Select(a => $"{a.Title} (PID {a.Pid})"))}");
+                    $"App selector '{app}' is ambiguous. Use window_id: {string.Join(", ", matches.Select(a => $"{a.Title} (PID {a.Pid}, window_id {a.WindowId})"))}");
             return matches.SingleOrDefault();
         }
+    }
+
+    private static bool TryParseWindowId(string selector, out int pid, out IntPtr hwnd)
+    {
+        pid = 0;
+        hwnd = IntPtr.Zero;
+        int separator = selector.IndexOf(":0x", StringComparison.OrdinalIgnoreCase);
+        if (separator <= 0
+            || !int.TryParse(selector[..separator], out pid)
+            || !long.TryParse(
+                selector[(separator + 3)..],
+                NumberStyles.HexNumber,
+                CultureInfo.InvariantCulture,
+                out var rawHwnd))
+            return false;
+        hwnd = (IntPtr)rawHwnd;
+        return true;
     }
 
     // ---------- Snapshot ----------
@@ -245,26 +326,24 @@ public sealed class UiaService
             Walk(root, 0);
             snap.TreeText = sb.ToString();
             if (snap.TreeText.Length > textLimit * 40) snap.TreeText = snap.TreeText[..(textLimit * 40)] + "\n... (truncated)";
-            // Keyed by pid only — process name can collide (two Chrome windows are two
-            // processes sharing the name "chrome"), pid never does.
-            _snapshots[app.Pid.ToString()] = snap;
+            // Store by HWND so multiple independent top-level windows from one process
+            // retain separate element-id namespaces and snapshots.
+            _snapshots.Store(snap);
             return snap;
         }, ct);
 
-    /// <summary>Cached snapshot for a resolved target, or null if there isn't one yet or it's
-    /// stale (the process's main window handle changed since the snapshot was taken).</summary>
+    /// <summary>Cached snapshot for the exact resolved top-level window.</summary>
     public Snapshot? GetSnapshot(AppTarget target)
     {
-        if (!_snapshots.TryGetValue(target.Pid.ToString(), out var s)) return null;
-        return s.Hwnd == target.Hwnd ? s : null;
+        return _snapshots.GetForTarget(target);
     }
 
-    /// <summary>The latest snapshot owned by a process, regardless of which of that
-    /// process's top-level windows is currently reported as MainWindowHandle. Element
-    /// ids remain tied to <see cref="Snapshot.Hwnd"/>; callers must act through that
-    /// exact root after validating that it still exists.</summary>
-    public Snapshot? GetSnapshotForPid(int pid)
-        => _snapshots.TryGetValue(pid.ToString(), out var snapshot) ? snapshot : null;
+    /// <summary>Snapshot containing an element id for this target. If the resolved
+    /// window already has a snapshot, ids from sibling windows are rejected. A
+    /// same-process fallback is used only for a transient replacement window that
+    /// has no snapshot of its own.</summary>
+    public Snapshot? GetSnapshotForElement(AppTarget target, string elementId)
+        => _snapshots.GetForElement(target, elementId);
 
     // ---------- Element resolution ----------
 
@@ -296,6 +375,30 @@ public sealed class UiaService
                 catch { }
             }
             return (IUIAutomationElement?)null;
+        }, ct);
+
+    public Task<ElementFrame?> GetElementFrameAsync(
+        IUIAutomationElement element,
+        CancellationToken ct = default)
+        => _uia.InvokeAsync(() =>
+        {
+            try
+            {
+                var rectangle = element.CurrentBoundingRectangle;
+                int width = rectangle.right - rectangle.left;
+                int height = rectangle.bottom - rectangle.top;
+                if (width <= 0 || height <= 0) return (ElementFrame?)null;
+                return (ElementFrame?)new ElementFrame(
+                    rectangle.left,
+                    rectangle.top,
+                    width,
+                    height,
+                    element.CurrentNativeWindowHandle.ToInt32());
+            }
+            catch
+            {
+                return (ElementFrame?)null;
+            }
         }, ct);
 
     public Task<IUIAutomationElement?> FindByTextAsync(IntPtr hwnd, string text, CancellationToken ct = default)

@@ -47,4 +47,43 @@ public sealed class UiaServiceSelectionTests
         Assert.Contains("PID 100", ambiguity.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("PID 200", ambiguity.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void SelectApp_RejectsPidThatOwnsMultipleWindows()
+    {
+        var candidates = new[]
+        {
+            new AppTarget { Pid = 100, ProcessName = "same", Hwnd = (IntPtr)1, Title = "First" },
+            new AppTarget { Pid = 100, ProcessName = "same", Hwnd = (IntPtr)2, Title = "Second" },
+        };
+        var selectApp = typeof(UiaService).GetMethod(
+            "SelectApp",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(selectApp);
+        var error = Assert.Throws<TargetInvocationException>(
+            () => selectApp.Invoke(null, [candidates, "100"]));
+
+        var ambiguity = Assert.IsType<InvalidOperationException>(error.InnerException);
+        Assert.Contains("window", ambiguity.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SelectApp_AcceptsPidAndWindowHandleSelector()
+    {
+        var candidates = new[]
+        {
+            new AppTarget { Pid = 100, ProcessName = "same", Hwnd = (IntPtr)1, Title = "First" },
+            new AppTarget { Pid = 100, ProcessName = "same", Hwnd = (IntPtr)2, Title = "Second" },
+        };
+        var selectApp = typeof(UiaService).GetMethod(
+            "SelectApp",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(selectApp);
+        var selected = Assert.IsType<AppTarget>(
+            selectApp.Invoke(null, [candidates, "100:0x2"]));
+
+        Assert.Equal((IntPtr)2, selected.Hwnd);
+    }
 }

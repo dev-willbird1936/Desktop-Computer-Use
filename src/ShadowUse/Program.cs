@@ -37,16 +37,16 @@ internal static class Program
                     Background computer control for Windows. All actions are focus-free:
                     UIA patterns or posted window messages — the real cursor never moves,
                     the foreground never changes, and target apps never count as focused.
-                    A cosmetic virtual cursor shows actions to the user.
+                    A cosmetic virtual cursor shows actions and hides after one idle minute.
 
-                    Workflow: list_apps → get_app_state(app) → act by element id
+                    Workflow: list_apps → select by window_id when needed → get_app_state(app) → act by element id
                     (click/type_text/press_key/scroll/set_value/drag) → re-snapshot.
                     Element ids are tied to the snapshot that produced them: if an id is
                     unknown, or its element has since vanished, re-run get_app_state.
-                    Raw x,y coordinate clicks are NOT guarded against the window having
-                    moved unless the EnableBoundsGuard setting is turned on (off by
-                    default) — prefer element ids when precision matters. Use wait_for
-                    to poll without snapshots, execute_sequence to batch steps server-side.
+                    Snapshot-based raw coordinates translate with window movement unless
+                    EnableBoundsGuard is on, which rejects changed bounds. Prefer element
+                    ids for responsive layouts and after resize. Use wait_for to poll
+                    without snapshots, execute_sequence to batch steps server-side.
                     """;
             })
             .WithStdioServerTransport()

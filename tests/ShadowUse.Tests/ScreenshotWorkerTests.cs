@@ -7,6 +7,29 @@ namespace ShadowUse.Tests;
 public sealed class ScreenshotWorkerTests
 {
     [Fact]
+    public void GetAnnotationPoint_UsesWindowRelativeSnapshotCoordinates()
+    {
+        var screenshotType = typeof(UiaService).Assembly.GetType("ShadowUse.Capture.ScreenshotService");
+        Assert.NotNull(screenshotType);
+        var method = screenshotType.GetMethod(
+            "GetAnnotationPoint",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var element = new ElementInfo
+        {
+            Id = "e1",
+            X = 28,
+            Y = 111,
+            ScreenX = 128,
+            ScreenY = 311,
+        };
+
+        var point = Assert.IsType<Point>(method.Invoke(null, [element]));
+
+        Assert.Equal(new Point(28, 111), point);
+    }
+
+    [Fact]
     public void SelectWindowCapture_DoesNotReadScreenWithoutExplicitPermission()
     {
         var screenshotType = typeof(UiaService).Assembly.GetType("ShadowUse.Capture.ScreenshotService");

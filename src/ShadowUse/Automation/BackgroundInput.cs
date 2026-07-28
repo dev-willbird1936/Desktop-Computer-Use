@@ -28,7 +28,7 @@ public sealed class BackgroundInput
 
     /// <summary>Click an element: UIA Invoke/Toggle/Select (left only) → message click at element center.</summary>
     public async Task<InputResult> ClickElementAsync(IntPtr hwnd, IUIAutomationElement? element, ElementInfo? info,
-        MouseButton button, int clickCount, CancellationToken ct)
+        MouseButton button, int clickCount, CancellationToken ct, ElementFrame? currentFrame = null)
     {
         // Tier 1: UIA patterns (left button only; right/middle have no semantic pattern)
         if (element != null && button == MouseButton.Left)
@@ -63,8 +63,16 @@ public sealed class BackgroundInput
 
         // Tier 2: message click — at element center if known, else needs coordinates
         if (info == null) return new InputResult(false, "none", "no UIA pattern and no element frame");
-        return await ClickAtAsync(hwnd, info.ScreenX + info.Width / 2, info.ScreenY + info.Height / 2,
-            button, clickCount, ct, ResolveInputHwnd(hwnd, info)).ConfigureAwait(false);
+        int screenX = currentFrame?.CenterX ?? info.ScreenX + info.Width / 2;
+        int screenY = currentFrame?.CenterY ?? info.ScreenY + info.Height / 2;
+        return await ClickAtAsync(
+            hwnd,
+            screenX,
+            screenY,
+            button,
+            clickCount,
+            ct,
+            ResolveInputHwnd(hwnd, info, currentFrame)).ConfigureAwait(false);
     }
 
     /// <summary>Message-based click at screen coordinates. Never moves the real cursor.
@@ -127,9 +135,13 @@ public sealed class BackgroundInput
     /// Chromium DOM elements report NativeWindowHandle == 0 (UIA only populates it for
     /// hwnd-backed fragment roots), so returning the top-level hwnd here — instead of
     /// null — used to skip the point-based descent entirely for every such element.</summary>
-    public IntPtr? ResolveInputHwnd(IntPtr hwnd, ElementInfo? info)
+    public IntPtr? ResolveInputHwnd(
+        IntPtr hwnd,
+        ElementInfo? info,
+        ElementFrame? currentFrame = null)
     {
-        if (info?.NativeWindowHandle is int h and > 0 && h != hwnd.ToInt32())
+        int h = currentFrame?.NativeWindowHandle ?? info?.NativeWindowHandle ?? 0;
+        if (h > 0 && h != hwnd.ToInt32())
             return (IntPtr)h;
         return null;
     }
@@ -594,7 +606,7 @@ public sealed class BackgroundInput
 
     /// <summary>Scroll: UIA ScrollPattern first, wheel messages as fallback.</summary>
     public async Task<InputResult> ScrollAsync(IntPtr hwnd, IUIAutomationElement? element, ElementInfo? info,
-        string direction, double pages, CancellationToken ct)
+        string direction, double pages, CancellationToken ct, ElementFrame? currentFrame = null)
     {
         direction = direction.ToLowerInvariant();
         if (!ValidDirections.Contains(direction))
@@ -629,8 +641,8 @@ public sealed class BackgroundInput
         // Fallback: wheel messages at element center (or window center).
         // WM_MOUSEWHEEL lParam is SCREEN coordinates (not client), and the message must
         // reach the content window (render widget), not the top-level frame.
-        int x = info != null ? info.ScreenX + info.Width / 2 : 0;
-        int y = info != null ? info.ScreenY + info.Height / 2 : 0;
+        int x = currentFrame?.CenterX ?? (info != null ? info.ScreenX + info.Width / 2 : 0);
+        int y = currentFrame?.CenterY ?? (info != null ? info.ScreenY + info.Height / 2 : 0);
         if (info == null)
         {
             NativeMethods.GetWindowRect(hwnd, out var r);
@@ -638,7 +650,8 @@ public sealed class BackgroundInput
         }
         return await Task.Run(() =>
         {
-            var target = info?.NativeWindowHandle is int nh and > 0 ? (IntPtr)nh : ChildWindowFromPoint(hwnd, x, y);
+            int nativeWindowHandle = currentFrame?.NativeWindowHandle ?? info?.NativeWindowHandle ?? 0;
+            var target = nativeWindowHandle > 0 ? (IntPtr)nativeWindowHandle : ChildWindowFromPoint(hwnd, x, y);
             int notches = Math.Max(1, (int)Math.Ceiling(pages * 3)); // ~3 notches per "page"
             uint msg = direction is "left" or "right" ? (uint)NativeMethods.WM_MOUSEHWHEEL : (uint)NativeMethods.WM_MOUSEWHEEL;
             // Vertical: positive delta = wheel tilted away from the user = scroll up.

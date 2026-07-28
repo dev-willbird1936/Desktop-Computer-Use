@@ -55,6 +55,8 @@ internal sealed class VirtualCursorOverlay : IDisposable
     {
         private const int CursorSize = 28;
         private readonly System.Windows.Forms.Timer _animTimer;
+        private readonly System.Windows.Forms.Timer _idleTimer;
+        private readonly CursorIdleState _idleState = new(TimeSpan.FromMinutes(1));
         private PointF _pos;            // current animated position (top-left of glyph)
         private PointF _target;
         private bool _pulseOnArrive;
@@ -72,6 +74,12 @@ internal sealed class VirtualCursorOverlay : IDisposable
             TopMost = true;
             _animTimer = new System.Windows.Forms.Timer { Interval = 16 }; // ~60fps
             _animTimer.Tick += (_, _) => Tick();
+            _idleTimer = new System.Windows.Forms.Timer { Interval = 1_000 };
+            _idleTimer.Tick += (_, _) =>
+            {
+                if (_idleState.ShouldHide(DateTimeOffset.UtcNow))
+                    HideCursor();
+            };
         }
 
         protected override void OnHandleCreated(EventArgs e)
@@ -112,6 +120,8 @@ internal sealed class VirtualCursorOverlay : IDisposable
 
         public void AnimateTo(int x, int y, bool clickPulse)
         {
+            _idleState.RecordActivity(DateTimeOffset.UtcNow);
+            _idleTimer.Start();
             if (!_visible)
             {
                 _pos = new PointF(x, y); // first appearance: no cross-screen swoop
@@ -125,6 +135,7 @@ internal sealed class VirtualCursorOverlay : IDisposable
         public void HideCursor()
         {
             _animTimer.Stop();
+            _idleTimer.Stop();
             Visible = false;
             _visible = false;
         }
@@ -234,7 +245,7 @@ internal sealed class VirtualCursorOverlay : IDisposable
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { _animTimer.Dispose(); _frame?.Dispose(); }
+            if (disposing) { _animTimer.Dispose(); _idleTimer.Dispose(); _frame?.Dispose(); }
             base.Dispose(disposing);
         }
     }
@@ -245,6 +256,25 @@ internal sealed class VirtualCursorOverlay : IDisposable
         try { _form?.BeginInvoke(() => Application.ExitThread()); } catch { }
         _thread.Join(1000);
     }
+}
+
+internal sealed class CursorIdleState
+{
+    private readonly TimeSpan _idleTimeout;
+    private DateTimeOffset? _lastActivity;
+
+    public CursorIdleState(TimeSpan idleTimeout)
+    {
+        if (idleTimeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(idleTimeout));
+        _idleTimeout = idleTimeout;
+    }
+
+    public void RecordActivity(DateTimeOffset now) => _lastActivity = now;
+
+    public bool ShouldHide(DateTimeOffset now)
+        => _lastActivity is DateTimeOffset lastActivity
+            && now - lastActivity >= _idleTimeout;
 }
 
 internal static partial class NativeMethodsGdi
