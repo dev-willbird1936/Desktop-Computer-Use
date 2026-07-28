@@ -1,0 +1,9 @@
+// Syncthing-local generated output.
+(?d)**/bin
+(?d)**/obj
+(?d)**/TestResults
+(?d)**/__pycache__
+(?d)publish
+(?d)publish-*
+(?d).serena
+(?d).impeccable

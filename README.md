@@ -64,6 +64,8 @@ Run diagnostics at any time:
 | `wait_for` | Polls for text, elements, or window state on the server. |
 | `execute_sequence` | Runs several steps in one server-side batch. |
 | `hide_cursor` | Hides the cosmetic virtual cursor. |
+
+If more than one application matches a name or title, DCU returns an ambiguity error. Use the PID from `list_apps` to select the exact process.
 | `health_check` | Checks the desktop session, UIA thread, and overlay. |
 
 ## Settings
@@ -106,6 +108,14 @@ dotnet build src/ShadowUse/ShadowUse.csproj
 dotnet run --project src/ShadowUse/ShadowUse.csproj -- --doctor
 ```
 
+Windows shortcuts are also included:
+
+```powershell
+setup.bat
+run.bat --doctor
+test.bat
+```
+
 Create a self-contained release executable:
 
 ```powershell
@@ -121,7 +131,7 @@ Config/Settings            settings.json loader
 Automation/UiaThread       dedicated STA thread for UIA COM
 Automation/UiaService      snapshots, element IDs, and re-resolution
 Automation/BackgroundInput UIA-pattern-first input with message fallbacks
-Capture/ScreenshotService  PrintWindow and visible-region capture
+Capture/ScreenshotService  PrintWindow capture with bounded worker isolation
 Overlay/VirtualCursorOverlay cosmetic cursor and click animation
 Safety/Guard               optional bounds and desktop guards
 ```
@@ -131,7 +141,7 @@ Safety/Guard               optional bounds and desktop guards
 - Games and applications that read raw input or `GetAsyncKeyState` cannot see posted messages.
 - Modifier shortcuts do not always fire because posted messages do not update system-level modifier state. Chrome address-bar focus is handled through UIA as a verified exception.
 - A message click can rarely make an application activate itself.
-- `PrintWindow` fails on some hardware-accelerated applications and then falls back to visible-region capture.
+- `PrintWindow` fails on some hardware-accelerated applications. DCU then returns no screenshot by default instead of capturing an unrelated window from the visible screen.
 - The UIA text fallback can briefly foreground some applications.
 - Minimized windows do not have a capturable backing surface.
 - A non-elevated DCU process cannot control elevated targets.

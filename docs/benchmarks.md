@@ -55,7 +55,7 @@ Report card legend: **pass** / **warn** (documented platform limit) /
 |---|------|---------------|
 | 16 | Occluded window | Chrome positioned exactly over Notepad; `PrintWindow` still returns Notepad's content (evidence PNG saved) |
 | 17 | Minimized window | clean null/blank, no garbage, server unaffected |
-| 18 | Hardware-accelerated content | real pixels or documented fallback — never silent black |
+| 18 | Hardware-accelerated content | real `PrintWindow` pixels or a clean null result — never pixels from an unrelated occluding app |
 | 19 | Coordinate alignment (DPI) | frame-derived coordinates hit intended button at current monitor DPI |
 | 20 | Multi-monitor | requires multi-monitor rig — manual |
 
