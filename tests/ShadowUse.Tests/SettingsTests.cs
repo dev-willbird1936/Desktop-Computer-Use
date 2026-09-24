@@ -20,4 +20,11 @@ public sealed class SettingsTests
 
         Assert.Equal(expected, settings.PostActionDelayMs);
     }
+
+    [Fact]
+    public void EnableCatalogueComposition_DefaultsToFalse()
+    {
+        // F59-R02: catalogue composition stays behind a feature flag, off by default.
+        Assert.False(new ShadowSettings().EnableCatalogueComposition);
+    }
 }

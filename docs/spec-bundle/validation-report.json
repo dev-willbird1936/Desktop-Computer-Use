@@ -1,0 +1,23 @@
+{
+  "schema": "dcu.spec-validation.v1",
+  "date": "2026-09-20",
+  "status": "passed",
+  "core_features": 54,
+  "optional_features": 6,
+  "source_repositories": 28,
+  "specified_acceptance_cases": 120,
+  "specified_requirements": 120,
+  "dependency_graph": "acyclic",
+  "internal_feature_source_links": "resolved",
+  "baseline_classifications": "all 60 match the supplied catalogue",
+  "json_examples_and_manifests": "parsed successfully",
+  "clone_helper_offline_safety_tests": 12,
+  "all_reference_dry_run": "28 destinations; no network calls or destination directory created",
+  "not_performed": [
+    "Cloning all donor repositories",
+    "Executing donor software",
+    "Windows DCU runtime tests",
+    "Live model API calls",
+    "Changes to the user GitHub repository"
+  ]
+}

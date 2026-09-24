@@ -9,6 +9,15 @@ namespace ShadowUse.Native;
 public static partial class NativeMethods
 {
     public const int WM_NULL = 0x0000;
+    public const uint WM_QUIT = 0x0012;
+    public const uint PM_NOREMOVE = 0x0000;
+
+    public const uint EVENT_OBJECT_CREATE = 0x8000;
+    public const uint EVENT_OBJECT_DESTROY = 0x8001;
+    public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+    public const int OBJID_WINDOW = 0;
+    public const int CHILDID_SELF = 0;
+
     public const int WM_KEYDOWN = 0x0100;
     public const int WM_KEYUP = 0x0101;
     public const int WM_CHAR = 0x0102;
@@ -99,6 +108,9 @@ public static partial class NativeMethods
     internal static partial IntPtr SendMessageW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
     [LibraryImport("user32.dll", SetLastError = true)]
+    internal static partial uint GetDpiForWindow(IntPtr hWnd);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
     internal static partial IntPtr SendMessageTimeoutW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam,
         uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 
@@ -125,6 +137,51 @@ public static partial class NativeMethods
     internal static partial uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
     [LibraryImport("user32.dll", SetLastError = true)]
+    internal static partial IntPtr SetWinEventHook(
+        uint eventMin,
+        uint eventMax,
+        IntPtr hmodWinEventProc,
+        WinEventProc lpfnWinEventProc,
+        uint idProcess,
+        uint idThread,
+        uint flags);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool UnhookWinEvent(IntPtr hWinEventHook);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool PostThreadMessageW(
+        uint idThread,
+        uint msg,
+        IntPtr wParam,
+        IntPtr lParam);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    internal static partial int GetMessageW(
+        out MSG lpMsg,
+        IntPtr hWnd,
+        uint wMsgFilterMin,
+        uint wMsgFilterMax);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool PeekMessageW(
+        out MSG lpMsg,
+        IntPtr hWnd,
+        uint wMsgFilterMin,
+        uint wMsgFilterMax,
+        uint wRemoveMsg);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool TranslateMessage(ref MSG lpMsg);
+
+    [LibraryImport("user32.dll")]
+    internal static partial IntPtr DispatchMessageW(ref MSG lpMsg);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
 
@@ -145,6 +202,28 @@ public static partial class NativeMethods
 
     [LibraryImport("user32.dll")]
     internal static partial IntPtr GetDesktopWindow();
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    internal delegate void WinEventProc(
+        IntPtr hWinEventHook,
+        uint @event,
+        IntPtr hwnd,
+        int idObject,
+        int idChild,
+        uint idEventThread,
+        uint msEventTime);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MSG
+    {
+        public IntPtr Hwnd;
+        public uint Message;
+        public IntPtr WParam;
+        public IntPtr LParam;
+        public uint Time;
+        public POINT Point;
+        public uint Private;
+    }
 
     [LibraryImport("user32.dll")]
     internal static partial IntPtr GetWindow(IntPtr hWnd, uint uCmd);

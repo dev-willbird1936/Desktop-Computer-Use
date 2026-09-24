@@ -7,6 +7,20 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        if (TryGetScenario(args, out var scenario))
+        {
+            Application.Run(scenario switch
+            {
+                "login" => new LoginRegressionForm(),
+                "ambiguity" => new AmbiguityRegressionForm(),
+                "canvas" => new CanvasRegressionForm(),
+                "api_mixing" => new ApiMixingRegressionForm(),
+                _ => throw new ArgumentException($"Unknown native regression scenario '{scenario}'."),
+            });
+            return;
+        }
+
+        // Preserve the legacy numeric-argument stress fixture contract.
         var instance = args.Length > 0 && int.TryParse(args[0], out var parsed) ? parsed : 1;
         var left = args.Length > 1 && int.TryParse(args[1], out parsed) ? parsed : 80;
         var top = args.Length > 2 && int.TryParse(args[2], out parsed) ? parsed : 120;
@@ -28,6 +42,19 @@ internal static class Program
             form.Show();
         }
         Application.Run();
+    }
+
+    private static bool TryGetScenario(string[] args, out string scenario)
+    {
+        scenario = "";
+        if (args.Length != 2 || !args[0].Equals("--scenario", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        scenario = args[1].ToLowerInvariant();
+        if (scenario is "login" or "ambiguity" or "canvas" or "api_mixing")
+            return true;
+
+        throw new ArgumentException($"Unknown native regression scenario '{args[1]}'.");
     }
 }
 

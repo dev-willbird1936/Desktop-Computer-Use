@@ -16,10 +16,13 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <AssemblyMetadata Include="DcuRepositoryRoot" Value="$(MSBuildThisFileDirectory)../.." />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ShadowUse\ShadowUse.csproj" />
+    <ProjectReference Include="..\..\src\ShadowUse.Browser\ShadowUse.Browser.csproj" />
+    <ProjectReference Include="..\..\src\ShadowUse.Jev\ShadowUse.Jev.csproj" />
   </ItemGroup>
 
 </Project>

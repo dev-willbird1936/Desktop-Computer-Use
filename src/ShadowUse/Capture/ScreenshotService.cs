@@ -14,39 +14,102 @@ namespace ShadowUse.Capture;
 /// Visible-screen fallback is opt-in because it can capture an unrelated occluding app.
 /// Optionally overlays Set-of-Marks labels for snapshot elements.
 /// </summary>
+public sealed record CaptureEnvelope(string CaptureId, DateTimeOffset CapturedAt, string Origin, string? FailureReason, byte[]? Png, int? Width, int? Height, double? ScaleFromWindow)
+{
+    public static CaptureEnvelope NotRequested() =>
+        new("cap-" + Guid.NewGuid().ToString("N")[..12], DateTimeOffset.UtcNow, "not_requested", null, null, null, null, null);
+
+    public static CaptureEnvelope CachedPage() =>
+        new("cap-" + Guid.NewGuid().ToString("N")[..12], DateTimeOffset.UtcNow, "cached_page", null, null, null, null, null);
+}
+
 internal static class ScreenshotService
 {
     private static int _printWindowWorkerBusy;
 
-    /// <summary>Capture a window as PNG bytes. Returns null if all methods fail.</summary>
-    public static byte[]? CaptureWindow(
+    /// <summary>Capture a window with full provenance (F02-R01/R02): a capture id, timestamp,
+    /// origin (not_requested/print_window/screen_fallback/none), dimensions, a scale factor back
+    /// to window-relative coordinates, and an explicit failure reason. A missing image is always
+    /// an explicit result -- never silently substituted with a different window's or the whole
+    /// screen's image unless allowScreenFallback opted in.</summary>
+    public static CaptureEnvelope CaptureWindow(
         IntPtr hwnd,
         IReadOnlyList<ElementInfo>? annotateWith = null,
         int maxWidth = 1280,
         bool allowScreenFallback = false)
     {
-        if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
-            return null;
+        var captureId = "cap-" + Guid.NewGuid().ToString("N")[..12];
+        var capturedAt = DateTimeOffset.UtcNow;
 
-        Bitmap? bmp = SelectWindowCapture(
-            TryPrintWindow(hwnd, rect),
-            () => TryCopyFromScreen(rect),
-            allowScreenFallback);
-        if (bmp == null) return null;
+        if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
+            return new CaptureEnvelope(captureId, capturedAt, "none", "window_not_visible_or_zero_size", null, null, null, null);
+
+        // F02-R02: minimised is a distinct, well-supported case worth its own reason -- PrintWindow
+        // on a minimised window is well-known to be unreliable (garbage/blank content), so this is
+        // checked up front rather than only discovered after a failed/blank capture attempt.
+        if (NativeMethods.IsIconic(hwnd))
+            return new CaptureEnvelope(captureId, capturedAt, "none", "window_minimized", null, null, null, null);
+
+        var printWindowBmp = TryPrintWindow(hwnd, rect);
+        string origin;
+        Bitmap? bmp;
+        if (printWindowBmp != null)
+        {
+            bmp = printWindowBmp;
+            origin = "print_window";
+        }
+        else if (allowScreenFallback)
+        {
+            bmp = TryCopyFromScreen(rect);
+            origin = "screen_fallback";
+        }
+        else
+        {
+            bmp = null;
+            origin = "none";
+        }
+
+        if (bmp == null)
+        {
+            var reason = allowScreenFallback
+                ? "print_window_and_screen_fallback_both_failed"
+                : "print_window_failed_and_screen_fallback_disabled";
+            return new CaptureEnvelope(captureId, capturedAt, "none", reason, null, null, null, null);
+        }
 
         try
         {
             if (annotateWith != null && annotateWith.Count > 0)
                 Annotate(bmp, annotateWith);
 
+            double scale = 1.0;
             if (bmp.Width > maxWidth)
+            {
+                scale = (double)maxWidth / bmp.Width;
                 bmp = Scale(bmp, maxWidth);
+            }
 
             using var ms = new MemoryStream();
             bmp.Save(ms, ImageFormat.Png);
-            return ms.ToArray();
+            return new CaptureEnvelope(captureId, capturedAt, origin, null, ms.ToArray(), bmp.Width, bmp.Height, scale);
         }
         finally { bmp.Dispose(); }
+    }
+
+    /// <summary>Raw, unscaled, unannotated window capture for perception (OCR). Returns the
+    /// bitmap and the exact GetWindowRect used at capture time, matching the same
+    /// window-relative frame of reference as ElementInfo.X/Y. Caller must dispose the bitmap.</summary>
+    public static (Bitmap Bitmap, NativeMethods.RECT WindowRect)? CaptureWindowForVision(
+        IntPtr hwnd,
+        bool allowScreenFallback = false)
+    {
+        if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
+            return null;
+        var bmp = SelectWindowCapture(
+            TryPrintWindow(hwnd, rect),
+            () => TryCopyFromScreen(rect),
+            allowScreenFallback);
+        return bmp == null ? null : (bmp, rect);
     }
 
     /// <summary>Capture full virtual screen (all monitors).</summary>

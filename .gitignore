@@ -24,3 +24,5 @@ publish-*/
 
 # local AI-tooling cache/config (not part of the shipped project)
 .serena/
+.pi/
+.planning/

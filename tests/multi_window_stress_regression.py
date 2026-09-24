@@ -168,6 +168,17 @@ def move_window(hwnd: int, left: int, top: int, width: int, height: int) -> None
         raise ctypes.WinError(ctypes.get_last_error())
 
 
+def minimize_window(hwnd: int) -> None:
+    sw_minimize = 6
+    if not user32.ShowWindow(hwnd, sw_minimize):
+        pass  # ShowWindow returns the PREVIOUS visibility state, not a success flag; 0 is normal for an already-shown window.
+
+
+def restore_window(hwnd: int) -> None:
+    sw_restore = 9
+    user32.ShowWindow(hwnd, sw_restore)
+
+
 def wait_for_windows(process: subprocess.Popen[str], count: int = 1) -> list[int]:
     deadline = time.monotonic() + 10
     callback_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)

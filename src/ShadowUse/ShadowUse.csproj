@@ -30,7 +30,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ShadowUse.Browser\ShadowUse.Browser.csproj" />
+    <ProjectReference Include="..\ShadowUse.Jev\ShadowUse.Jev.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- F44: same release train as the core ModelContextProtocol package above (verified on
+         nuget.org: both publish 1.4.1 together from the official MCP C# SDK). Only used when
+         RemoteTransportUrl is explicitly configured; stdio remains the default transport. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="ModelContextProtocol" Version="1.4.1" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.1" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.9" />
     <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0" />

@@ -24,6 +24,20 @@ public sealed class BackgroundInput
     public sealed record InputResult(bool Success, string Method, string Detail = "");
     private sealed record AddressBarInput(string? Text);
 
+    /// <summary>Bug-hunt finding (documented in docs/benchmarks.md, class E, below the "major"
+    /// bar): a hwnd entry set when the address bar is selected (Ctrl+L) but never followed by a
+    /// Return keypress is never otherwise removed, including if the window later closes -- a
+    /// small unbounded-in-theory leak keyed by window handle over a very long process lifetime.
+    /// Opportunistic, O(live entries), called from the two entry points that touch the
+    /// dictionary; not a background timer, since this dictionary only ever holds one entry per
+    /// currently-tracked hwnd, not per call.</summary>
+    private void PruneDeadAddressBarEntries()
+    {
+        foreach (var hwnd in _addressBarInputs.Keys)
+            if (!NativeMethods.IsWindow(hwnd))
+                _addressBarInputs.TryRemove(hwnd, out _);
+    }
+
     // ---------- Click ----------
 
     /// <summary>Click an element: UIA Invoke/Toggle/Select (left only) → message click at element center.</summary>
@@ -158,6 +172,7 @@ public sealed class BackgroundInput
     /// </summary>
     public async Task<InputResult> TypeTextAsync(IntPtr hwnd, string text, CancellationToken ct, bool allowUiaTextFallback = false)
     {
+        PruneDeadAddressBarEntries();
         // Ctrl+L establishes an explicit omnibox target. Chromium has separate native
         // routing for its frame and page render widget, so a key stream aimed at the
         // render widget cannot type into the omnibox selected by the frame accelerator.
@@ -220,8 +235,9 @@ public sealed class BackgroundInput
             {
                 foreach (char c in text)
                 {
+                    ct.ThrowIfCancellationRequested();
                     short vk = NativeMethods.VkKeyScanW((ushort)c);
-                    if (vk != -1)
+                    if (!ShouldSendCharOnly(vk))
                     {
                         int key = vk & 0xFF;
                         bool shift = (vk & 0x100) != 0;
@@ -263,12 +279,23 @@ public sealed class BackgroundInput
         {
             foreach (char c in text)
             {
+                ct.ThrowIfCancellationRequested();
                 NativeMethods.PostMessageW(hwnd, NativeMethods.WM_CHAR, (IntPtr)c, IntPtr.Zero);
                 Thread.Sleep(8);
             }
         }, ct).ConfigureAwait(false);
         return new InputResult(true, "wm_char", $"{text.Length} chars");
     }
+
+    /// <summary>True when a VkKeyScanW result is unmapped (-1) or requires holding Ctrl and/or
+    /// Alt to produce the character (bits 0x0200/0x0400 in the high byte) -- in both cases the
+    /// character should be sent as a plain WM_CHAR, never a simulated keydown/keyup. VkKeyScanW
+    /// ('\n') returns VK_RETURN with the Ctrl bit set on a US layout -- there is no direct
+    /// keystroke that types a bare LF, so Windows reports the "closest" virtual key. Simulating
+    /// that as a real keydown/keyup would send an actual VK_RETURN to the target, which a web
+    /// page's Enter handler can read as "submit the form" -- an unintended action a text-typing
+    /// tool must never trigger.</summary>
+    internal static bool ShouldSendCharOnly(short vk) => vk == -1 || (vk & 0x0600) != 0;
 
     /// <summary>Find a Chromium/Electron render-widget child window (the HWND that
     /// actually receives keyboard input), if this is that kind of app.</summary>
@@ -426,6 +453,7 @@ public sealed class BackgroundInput
     /// <summary>Key press via posted WM_KEYDOWN/WM_KEYUP (+WM_CHAR for text keys). No focus steal.</summary>
     public async Task<InputResult> PressKeyAsync(IntPtr hwnd, string key, CancellationToken ct)
     {
+        PruneDeadAddressBarEntries();
         var (vk, ch, mods) = ParseKey(key);
         bool isSelectAddress = vk == 'L' && mods.Length == 1 && mods[0] == NativeMethods.VK_CONTROL;
         if (isSelectAddress)

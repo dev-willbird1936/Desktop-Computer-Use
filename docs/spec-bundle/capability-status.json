@@ -1,0 +1,1831 @@
+{
+  "schema": "dcu.capability-status.v1",
+  "spec_version": "1.1",
+  "created_on": "2026-09-20",
+  "features": [
+    {
+      "feature_id": "F01",
+      "title": "Background desktop input",
+      "status": "unassessed",
+      "baseline_assessment": "Keep",
+      "scope": "core",
+      "dependencies": [],
+      "inspiration_ids": [
+        "DCU"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F01-T01",
+        "F01-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F02",
+      "title": "Target-bound background capture",
+      "status": "unassessed",
+      "baseline_assessment": "Keep",
+      "scope": "core",
+      "dependencies": [
+        "F01"
+      ],
+      "inspiration_ids": [
+        "DCU"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F02-T01",
+        "F02-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F03",
+      "title": "Exact desktop/browser target identity",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F01"
+      ],
+      "inspiration_ids": [
+        "DCU",
+        "S01"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F03-T01",
+        "F03-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F04",
+      "title": "Hybrid semantic observations",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F02",
+        "F03"
+      ],
+      "inspiration_ids": [
+        "S16"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F04-T01",
+        "F04-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F05",
+      "title": "Visual grounding fallback",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F02",
+        "F04",
+        "F08",
+        "F42"
+      ],
+      "inspiration_ids": [
+        "S17",
+        "S16"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F05-T01",
+        "F05-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F06",
+      "title": "Goal-relevant compact snapshots",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F04"
+      ],
+      "inspiration_ids": [
+        "S10",
+        "S05"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F06-T01",
+        "F06-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F07",
+      "title": "Semantic and visual state diffs",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F04"
+      ],
+      "inspiration_ids": [
+        "DCU",
+        "S10"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F07-T01",
+        "F07-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F08",
+      "title": "Fresh-observation action binding",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F03",
+        "F04"
+      ],
+      "inspiration_ids": [
+        "S01",
+        "S02"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F08-T01",
+        "F08-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F09",
+      "title": "Contextual locator repair with disambiguation",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F03",
+        "F08"
+      ],
+      "inspiration_ids": [
+        "S11",
+        "S09"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F09-T01",
+        "F09-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F10",
+      "title": "Pre-action readiness checks",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F08",
+        "F09"
+      ],
+      "inspiration_ids": [
+        "S09"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F10-T01",
+        "F10-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F11",
+      "title": "Browser-native control adapter",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F03",
+        "F08",
+        "F10",
+        "F37"
+      ],
+      "inspiration_ids": [
+        "S08",
+        "S09",
+        "S10"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F11-T01",
+        "F11-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F12",
+      "title": "Page-provided WebMCP operations",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F11",
+        "F37",
+        "F40"
+      ],
+      "inspiration_ids": [
+        "S14"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F12-T01",
+        "F12-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F13",
+      "title": "Application API and GUI mixing",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F03",
+        "F37",
+        "F45"
+      ],
+      "inspiration_ids": [
+        "S15"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F13-T01",
+        "F13-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F14",
+      "title": "Complete browser surface handling",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F11",
+        "F37"
+      ],
+      "inspiration_ids": [
+        "S08",
+        "S09"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F14-T01",
+        "F14-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F15",
+      "title": "Reusable and isolated browser sessions",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F11",
+        "F37",
+        "F39"
+      ],
+      "inspiration_ids": [
+        "S08",
+        "S09",
+        "S10"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F15-T01",
+        "F15-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F16",
+      "title": "Condition-driven settling",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F04",
+        "F10"
+      ],
+      "inspiration_ids": [
+        "DCU",
+        "S09"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F16-T01",
+        "F16-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F17",
+      "title": "State-aware server-side batches",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F08",
+        "F16",
+        "F43",
+        "F45"
+      ],
+      "inspiration_ids": [
+        "DCU",
+        "S12"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F17-T01",
+        "F17-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F18",
+      "title": "Reviewed reusable helpers",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F29",
+        "F36",
+        "F37",
+        "F38",
+        "F46"
+      ],
+      "inspiration_ids": [
+        "S03"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F18-T01",
+        "F18-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F19",
+      "title": "Bounded Jev action choice",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F06",
+        "F08",
+        "F37",
+        "F42"
+      ],
+      "inspiration_ids": [
+        "S01",
+        "S02"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F19-T01",
+        "F19-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F20",
+      "title": "Independent questions in one Jev call",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F19"
+      ],
+      "inspiration_ids": [
+        "S02"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F20-T01",
+        "F20-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F21",
+      "title": "Typed semantic ranking and classification",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F19"
+      ],
+      "inspiration_ids": [
+        "S07",
+        "S05"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F21-T01",
+        "F21-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F22",
+      "title": "Uncertainty-aware escalation",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F19",
+        "F21",
+        "F37"
+      ],
+      "inspiration_ids": [
+        "S01"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F22-T01",
+        "F22-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F23",
+      "title": "Planner/controller separation",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F19",
+        "F22",
+        "F29"
+      ],
+      "inspiration_ids": [
+        "S18",
+        "S22"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F23-T01",
+        "F23-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F24",
+      "title": "Separate text/content generation",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F19",
+        "F37",
+        "F39"
+      ],
+      "inspiration_ids": [
+        "S02"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F24-T01",
+        "F24-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F25",
+      "title": "Deterministic candidate filtering and bypass",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F19",
+        "F37"
+      ],
+      "inspiration_ids": [
+        "S06"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F25-T01",
+        "F25-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F26",
+      "title": "Adaptive cadence and stale-response rejection",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F08",
+        "F16",
+        "F19",
+        "F43"
+      ],
+      "inspiration_ids": [
+        "S06",
+        "S05",
+        "S02"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F26-T01",
+        "F26-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F27",
+      "title": "Configurable models and controlled failover",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F19",
+        "F22",
+        "F40",
+        "F43"
+      ],
+      "inspiration_ids": [
+        "S12",
+        "S22"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F27-T01",
+        "F27-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F28",
+      "title": "Experience memory and loop recovery",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F07",
+        "F19",
+        "F43",
+        "F46"
+      ],
+      "inspiration_ids": [
+        "S18",
+        "S05"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F28-T01",
+        "F28-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F29",
+      "title": "Dependency-aware cross-application workflows",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F37",
+        "F43",
+        "F45"
+      ],
+      "inspiration_ids": [
+        "S15"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F29-T01",
+        "F29-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F30",
+      "title": "Demonstration-to-reviewed workflow replay",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F09",
+        "F18",
+        "F29",
+        "F38",
+        "F46"
+      ],
+      "inspiration_ids": [
+        "S19",
+        "S28"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F30-T01",
+        "F30-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F31",
+      "title": "Cached action resolution",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F08",
+        "F09",
+        "F37"
+      ],
+      "inspiration_ids": [
+        "S11"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F31-T01",
+        "F31-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F32",
+      "title": "Typed non-UI workflow steps",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F29",
+        "F37",
+        "F41"
+      ],
+      "inspiration_ids": [
+        "S20"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F32-T01",
+        "F32-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F33",
+      "title": "Schema-validated structured extraction",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F04",
+        "F11",
+        "F40"
+      ],
+      "inspiration_ids": [
+        "S11",
+        "S12"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F33-T01",
+        "F33-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F34",
+      "title": "Verbatim source-span extraction",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F04",
+        "F08",
+        "F33"
+      ],
+      "inspiration_ids": [
+        "S04"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F34-T01",
+        "F34-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F35",
+      "title": "Parallel independent workers",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F03",
+        "F17",
+        "F29",
+        "F43"
+      ],
+      "inspiration_ids": [
+        "S15",
+        "S21"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F35-T01",
+        "F35-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F36",
+      "title": "Isolated execution environments",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F35",
+        "F37",
+        "F41",
+        "F43"
+      ],
+      "inspiration_ids": [
+        "S01"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F36-T01",
+        "F36-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F37",
+      "title": "Full user-authorized input, including sensitive fields",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [],
+      "inspiration_ids": [
+        "S10"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F37-T01",
+        "F37-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F38",
+      "title": "Authenticated session and account workflow support",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F37"
+      ],
+      "inspiration_ids": [
+        "S10",
+        "S19",
+        "S28"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F38-T01",
+        "F38-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F39",
+      "title": "Flexible value and credential sources",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F03",
+        "F37",
+        "F38"
+      ],
+      "inspiration_ids": [
+        "S10",
+        "S11"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F39-T01",
+        "F39-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F40",
+      "title": "Rich private-data workflows",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F37",
+        "F39"
+      ],
+      "inspiration_ids": [
+        "S10"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F40-T01",
+        "F40-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F41",
+      "title": "Network-aware browser workflows",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F37",
+        "F40"
+      ],
+      "inspiration_ids": [
+        "S10"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F41-T01",
+        "F41-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F42",
+      "title": "Capability-aware routing and fallback",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F01",
+        "F02",
+        "F03"
+      ],
+      "inspiration_ids": [
+        "DCU",
+        "S01"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F42-T01",
+        "F42-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F43",
+      "title": "Bounded execution, cancellation and recovery",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F37"
+      ],
+      "inspiration_ids": [
+        "S12",
+        "S05",
+        "DCU"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F43-T01",
+        "F43-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F44",
+      "title": "Optional remote DCU transport",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F37",
+        "F39",
+        "F40",
+        "F43"
+      ],
+      "inspiration_ids": [
+        "S23"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F44-T01",
+        "F44-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F45",
+      "title": "Fast per-action effect feedback",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F04",
+        "F07",
+        "F16"
+      ],
+      "inspiration_ids": [
+        "DCU"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F45-T01",
+        "F45-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F46",
+      "title": "Task-completion checks",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F29",
+        "F45"
+      ],
+      "inspiration_ids": [
+        "S01",
+        "S19",
+        "S28"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F46-T01",
+        "F46-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F47",
+      "title": "Semantic and visual state checks",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F05",
+        "F16",
+        "F46"
+      ],
+      "inspiration_ids": [
+        "S24"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F47-T01",
+        "F47-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F48",
+      "title": "Replayable run timeline",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F39",
+        "F43",
+        "F45"
+      ],
+      "inspiration_ids": [
+        "S09",
+        "S21"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F48-T01",
+        "F48-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F49",
+      "title": "Live Jev/controller inspector",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F19",
+        "F43",
+        "F48"
+      ],
+      "inspiration_ids": [
+        "S05",
+        "S02"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F49-T01",
+        "F49-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F50",
+      "title": "Browser network and console diagnostics",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F11",
+        "F39",
+        "F48"
+      ],
+      "inspiration_ids": [
+        "S13"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F50-T01",
+        "F50-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F51",
+      "title": "Performance and environment profiling",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F48",
+        "F50"
+      ],
+      "inspiration_ids": [
+        "S13"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F51-T01",
+        "F51-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F52",
+      "title": "Recorded-network and mock replay",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F11",
+        "F39",
+        "F48"
+      ],
+      "inspiration_ids": [
+        "S09"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F52-T01",
+        "F52-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F53",
+      "title": "Speed and capability benchmarks",
+      "status": "unassessed",
+      "baseline_assessment": "Extend",
+      "scope": "core",
+      "dependencies": [
+        "F42",
+        "F45",
+        "F46",
+        "F48",
+        "F51",
+        "F52"
+      ],
+      "inspiration_ids": [
+        "DCU",
+        "S25",
+        "S01"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F53-T01",
+        "F53-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F54",
+      "title": "Human takeover and resume",
+      "status": "unassessed",
+      "baseline_assessment": "New",
+      "scope": "core",
+      "dependencies": [
+        "F08",
+        "F35",
+        "F38",
+        "F43",
+        "F48"
+      ],
+      "inspiration_ids": [
+        "S20"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F54-T01",
+        "F54-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F55",
+      "title": "Intent-aware search and filtering",
+      "status": "unassessed",
+      "baseline_assessment": "Optional",
+      "scope": "optional",
+      "dependencies": [
+        "F21",
+        "F26",
+        "F39",
+        "F40"
+      ],
+      "inspiration_ids": [
+        "S05"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F55-T01",
+        "F55-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F56",
+      "title": "Named multi-application workspaces",
+      "status": "unassessed",
+      "baseline_assessment": "Optional",
+      "scope": "optional",
+      "dependencies": [
+        "F29",
+        "F37",
+        "F55"
+      ],
+      "inspiration_ids": [
+        "S05"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F56-T01",
+        "F56-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F57",
+      "title": "Predictive semantic spreadsheet columns",
+      "status": "unassessed",
+      "baseline_assessment": "Optional",
+      "scope": "optional",
+      "dependencies": [
+        "F21",
+        "F26",
+        "F33",
+        "F39"
+      ],
+      "inspiration_ids": [
+        "S05"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F57-T01",
+        "F57-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F58",
+      "title": "Voice turn-taking and interruption",
+      "status": "unassessed",
+      "baseline_assessment": "Optional",
+      "scope": "optional",
+      "dependencies": [
+        "F19",
+        "F26",
+        "F37",
+        "F43"
+      ],
+      "inspiration_ids": [
+        "S05"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F58-T01",
+        "F58-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F59",
+      "title": "Catalogue-constrained interface composition",
+      "status": "unassessed",
+      "baseline_assessment": "Optional",
+      "scope": "optional",
+      "dependencies": [
+        "F21",
+        "F37",
+        "F49"
+      ],
+      "inspiration_ids": [
+        "S26"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F59-T01",
+        "F59-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    },
+    {
+      "feature_id": "F60",
+      "title": "Shared human-and-agent review state",
+      "status": "unassessed",
+      "baseline_assessment": "Optional",
+      "scope": "optional",
+      "dependencies": [
+        "F35",
+        "F38",
+        "F39",
+        "F48",
+        "F54"
+      ],
+      "inspiration_ids": [
+        "S27"
+      ],
+      "integration_route": null,
+      "dcu_commit": null,
+      "source_refs": [],
+      "implemented_paths": [],
+      "acceptance_test_ids": [
+        "F60-T01",
+        "F60-T02"
+      ],
+      "tests": [],
+      "evidence": [],
+      "supported_configurations": [],
+      "blocked_reason": null,
+      "jev_off_supported": null,
+      "jev_modes_tested": [],
+      "last_tested_at": null
+    }
+  ]
+}

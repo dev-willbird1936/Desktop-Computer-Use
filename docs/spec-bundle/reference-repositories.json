@@ -1,0 +1,868 @@
+{
+  "schema": "dcu.reference-repositories.v1",
+  "created_on": "2026-09-20",
+  "logical_root": "/other-software",
+  "windows_root_example": "C:\\other-software",
+  "checkout_policy": "Clone for inspection only. Resolve/lock initial HEAD; preserve existing clean pinned checkouts; never install or execute upstream software automatically.",
+  "main_project": {
+    "repository": "https://github.com/dev-willbird1936/Desktop-Computer-Use",
+    "reviewed_commit": "d6818547e5e92bdaf7c9fc61011e5851a37a7d42",
+    "clone_again": false
+  },
+  "repositories": [
+    {
+      "id": "S01",
+      "name": "Cua / Cua Driver",
+      "directory": "cua",
+      "repository": "https://github.com/trycua/cua.git",
+      "feature_ids": [
+        "F03",
+        "F08",
+        "F19",
+        "F22",
+        "F36",
+        "F42",
+        "F46",
+        "F53"
+      ],
+      "mechanism": "The public jev-use example separates a bounded chooser from the application-owned Driver loop. Its chooser validates a versioned request, accepts only candidate IDs/descriptions and compact evidence, requires reobserve/abstain, and returns an allowlisted ID. The application resolves the original action. Visual actions carry the exact capture_id. The form example verifies the value received by the test server instead of accepting a model completion claim. The wider project supplies desktop-driver, sandbox and evaluation components.",
+      "read_first": [
+        "libs/cua-driver/examples/jev-use/python/choose_action.py",
+        "libs/cua-driver/examples/jev-use/verify_setup.py",
+        "libs/cua-driver/examples/jev-use/fixtures/jev-choice-request-v1.json",
+        "README.md"
+      ],
+      "search_terms": [
+        "choose_bounded_with_typesafe",
+        "capture_id",
+        "capability",
+        "permission",
+        "sandbox",
+        "benchmark"
+      ],
+      "adaptation": "Port the bounded message contract, evidence binding, capability negotiation and independent fixture verification; keep DCU as the Windows executor. Treat sandbox management as a separate optional adapter.",
+      "caveat": "The form recipe is a public preview, not proof that arbitrary applications work. Its code-level 32-candidate limit is an example limit, not the TypeSafe API limit. A platform driver may allow best-effort background behaviour that DCU strict mode must refuse.",
+      "documentation": [
+        "https://cua.ai/docs/how-to-guides/driver/jev-use",
+        "https://cua.ai/docs/reference/cua-driver/platform-support"
+      ],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S02",
+      "name": "Jev Ultrafast",
+      "directory": "jev-ultrafast",
+      "repository": "https://github.com/browser-use/jev-ultrafast.git",
+      "feature_ids": [
+        "F08",
+        "F19",
+        "F20",
+        "F24",
+        "F26",
+        "F49"
+      ],
+      "mechanism": "An atomic browser observation builds an indexed table of actual DOM nodes. One TypeSafe request contains an operation question plus speculative target questions for compatible operations. Only the target for the selected operation is used. A separate small text model runs only for TYPE_TEXT. Browser execution rechecks freshness, geometry and occlusion. The inspector observes decisions but does not drive the underlying policy.",
+      "read_first": [
+        "jev_ultrafast/agent.py",
+        "jev_ultrafast/snapshot.js",
+        "jev_ultrafast/browser.py",
+        "jev_ultrafast/model.py",
+        "jev_ultrafast/questions.py",
+        "jev_ultrafast/demo.py",
+        "tests/"
+      ],
+      "search_terms": [
+        "click_target",
+        "type_text_target",
+        "TYPE_TEXT",
+        "focus",
+        "fresh",
+        "occlusion"
+      ],
+      "adaptation": "Reuse the atomic observation/indexing pattern, speculative fan-out and conditional text helper. Replace execution with DCU adapters and independently verify outcomes.",
+      "caveat": "Its README uses browser focus emulation to keep hidden tabs rendering. Do not copy that into strict_background. The reviewed MVP explicitly excludes several surfaces, including frames, shadow roots, canvas, uploads and popup tabs; obtain those from the full browser adapter, not by assuming this demo implements them.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S03",
+      "name": "Browser Harness",
+      "directory": "browser-harness",
+      "repository": "https://github.com/browser-use/browser-harness.git",
+      "feature_ids": [
+        "F18"
+      ],
+      "mechanism": "Browser Harness connects to a browser over CDP and exposes reusable helpers through an MCP interface. Its own src/browser_harness package stays protected while the agent writes missing helpers in a separate local agent workspace. DCU adds a formal admission/test boundary before those helpers can become trusted automation.",
+      "read_first": [
+        "README.md",
+        "src/browser_harness/",
+        "docs/MCP.md",
+        "install.md"
+      ],
+      "search_terms": [
+        "helper",
+        "workspace",
+        "browser",
+        "doctor",
+        "CDP"
+      ],
+      "adaptation": "Use a separate helper-development area with versioned admission and tests. Execute only admitted helpers through the same policy and adapter layer.",
+      "caveat": "Review/admission, sandboxing and a protected executor are DCU requirements, not claims that every upstream helper workflow already provides them. Read actual helper-loading and execution code before adopting its interface.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S04",
+      "name": "jev-browse",
+      "directory": "jev-browse",
+      "repository": "https://github.com/kyrylosyzonenko/jev-browse.git",
+      "feature_ids": [
+        "F34"
+      ],
+      "mechanism": "The project uses Jev for browser decisions and includes an extraction mode intended to select relevant source material instead of having a text model rewrite it.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "extract",
+        "verbatim",
+        "noul",
+        "choice",
+        "browser"
+      ],
+      "adaptation": "Preserve source spans, URLs, observation IDs and exact text. Keep source-span selection separate from structured extraction and summarisation.",
+      "caveat": "Verify the current extraction implementation after checkout; do not treat this repository as the missing source of the unrelated X demos.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S05",
+      "name": "Jev experiments",
+      "directory": "jev-experiments",
+      "repository": "https://github.com/dabit3/jev-experiments.git",
+      "feature_ids": [
+        "F06",
+        "F21",
+        "F26",
+        "F28",
+        "F43",
+        "F49",
+        "F55",
+        "F56",
+        "F57",
+        "F58"
+      ],
+      "mechanism": "AX Pilot flattens a macOS accessibility tree, supplies candidate IDs and code-extracted text, batches typed questions, and applies code-owned thresholds and loop guards. Launcher locally retrieves candidates, adds contextual evidence, reranks with Jev, rejects old responses and preserves manual selection. Judge Sheets batches questions by row/source text and caches asynchronous semantic formula results. Sift streams semantic email labels from a fixture. Voice Turn evaluates partial speech transcripts for completion and interruption while deterministic pause/silence rules remain in code.",
+      "read_first": [
+        "jev-ax-pilot/README.md",
+        "jev-ax-pilot/Sources/StateBuilder.swift",
+        "jev-ax-pilot/Sources/AnswerHandler.swift",
+        "jev-launcher/README.md",
+        "jev-launcher/Sources/JevQuestions.swift",
+        "judge-sheets/server/jev.ts",
+        "judge-sheets/src/lib/predict.ts",
+        "inbox-blitz/server/jev.ts",
+        "jev-instant-search/src/jev.ts",
+        "jev-voice-turn/Sources/TurnState.swift",
+        "jev-voice-turn/Sources/TurnPolicy.swift"
+      ],
+      "search_terms": [
+        "TreeFlattener",
+        "sequence",
+        "batchSpecs",
+        "JEV_CONCURRENCY",
+        "turn_complete",
+        "is_barge_in",
+        "time_window"
+      ],
+      "adaptation": "Port the controller and UX patterns, not macOS foreground input. Implement Windows indexing/speech adapters separately. Use one clone for every experiment rather than duplicating this monorepo into six folders.",
+      "caveat": "Paths beyond the README anchors are named in the reviewed example documentation; resolve them against the pinned checkout. Launcher in this repository is archived and points to dabit3/launcher; that successor README could not be verified in the spec-writing pass. Sift is not proof of a live Gmail connector; Judge Sheets is not a Google Sheets add-on. Demo thresholds are not production calibration.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S06",
+      "name": "JevPilot",
+      "directory": "jevpilot",
+      "repository": "https://github.com/standardagents/jevpilot.git",
+      "feature_ids": [
+        "F25",
+        "F26"
+      ],
+      "mechanism": "A simulation controller constructs valid candidate controls in ordinary code, avoids model decisions when the action is already determined, and varies decision timing with the state. This separates numerical/control constraints from semantic action selection.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "candidate",
+        "cadence",
+        "interval",
+        "safety",
+        "choice",
+        "deterministic"
+      ],
+      "adaptation": "Use deterministic candidate filtering, task-directed bypass and state-driven sampling in desktop/browser loops.",
+      "caveat": "Driving-specific controls and simulation results are not desktop reliability evidence. Having one technically valid action does not by itself authorise it or prove it advances the user goal.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S07",
+      "name": "Vercel ai-cli",
+      "directory": "ai-cli",
+      "repository": "https://github.com/vercel-labs/ai-cli.git",
+      "feature_ids": [
+        "F21"
+      ],
+      "mechanism": "Typed decision primitives are exposed through a command-line interface so ordinary programs can consume classifications and judgments instead of parsing unconstrained prose.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "choice",
+        "noul",
+        "score",
+        "stdin",
+        "stdout"
+      ],
+      "adaptation": "Use as an interoperability reference for machine-readable typed decisions. Prefer an in-process or narrow sidecar API when it avoids spawning one process per desktop step.",
+      "caveat": "This is decision plumbing, not a Windows driver, credential boundary or general task planner.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S08",
+      "name": "Playwright MCP",
+      "directory": "playwright-mcp",
+      "repository": "https://github.com/microsoft/playwright-mcp.git",
+      "feature_ids": [
+        "F11",
+        "F14",
+        "F15"
+      ],
+      "mechanism": "An MCP interface exposes browser automation operations over Playwright, including structured page observations and tools for common browser surfaces. Configuration distinguishes persistent/profile-backed sessions from isolated contexts.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "snapshot",
+        "browser_tabs",
+        "file_upload",
+        "dialog",
+        "isolated",
+        "storage-state"
+      ],
+      "adaptation": "Implement one native-browser adapter with equivalent typed operations and explicit session modes. Reuse upstream libraries/tools where practical instead of translating them into Win32 input.",
+      "caveat": "The public MCP repository can be a packaging/configuration entry point while implementation lives in the Playwright monorepo. Follow imports and package versions into S09; do not conclude that missing local implementation means the capability is absent.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S09",
+      "name": "Playwright",
+      "directory": "playwright",
+      "repository": "https://github.com/microsoft/playwright.git",
+      "feature_ids": [
+        "F09",
+        "F10",
+        "F11",
+        "F14",
+        "F15",
+        "F16",
+        "F48",
+        "F52"
+      ],
+      "mechanism": "Locators resolve at action time and actionability checks wait for properties such as uniqueness, visibility, stability and event reception where relevant. Contexts isolate browser state. Traces retain action-linked evidence; network routing can fulfil requests from mocks or HAR recordings.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "waitForSelector",
+        "checkElementStates",
+        "retryAction",
+        "routeFromHAR",
+        "tracing",
+        "TraceViewer",
+        "frameLocator"
+      ],
+      "adaptation": "Prefer the supported Playwright API for browser actionability, frames, session contexts, tracing and replay. Keep DCU IDs and result semantics at the adapter boundary.",
+      "caveat": "Checks differ by operation. Do not use force or JavaScript-dispatched clicks merely to bypass a failing actionability check. Browser-context isolation is not equivalent to OS/network isolation.",
+      "documentation": [
+        "https://playwright.dev/docs/actionability",
+        "https://playwright.dev/docs/trace-viewer",
+        "https://playwright.dev/docs/mock"
+      ],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S10",
+      "name": "agent-browser",
+      "directory": "agent-browser",
+      "repository": "https://github.com/vercel-labs/agent-browser.git",
+      "feature_ids": [
+        "F06",
+        "F07",
+        "F11",
+        "F15",
+        "F37",
+        "F38",
+        "F39",
+        "F40",
+        "F41"
+      ],
+      "mechanism": "A browser CLI exposes compact semantic snapshots with element references, scoped output, state/screenshot comparisons and session management. Its security interfaces include action policies, confirmation gates, an authentication vault, untrusted-content markers and destination restrictions.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "snapshot",
+        "diff",
+        "action-policy",
+        "confirm",
+        "auth",
+        "allowlist",
+        "content-boundaries"
+      ],
+      "adaptation": "Use compact observation modes, explicit diffs and deterministic policy concepts as adapter-independent DCU services.",
+      "caveat": "The inspected README describes a Rust CLI/daemon; do not assume an older TypeScript daemon path. Follow the checked-out implementation. Browser allowlists have documented limitations and cannot be advertised as complete egress containment.",
+      "documentation": [
+        "https://agent-browser.dev/snapshots",
+        "https://agent-browser.dev/diffing",
+        "https://agent-browser.dev/security"
+      ],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S11",
+      "name": "Stagehand",
+      "directory": "stagehand",
+      "repository": "https://github.com/browserbase/stagehand.git",
+      "feature_ids": [
+        "F09",
+        "F31",
+        "F33",
+        "F39"
+      ],
+      "mechanism": "The act, observe and extract interfaces interpret natural-language intent into browser operations or structured results. observe can resolve an action before sensitive values are supplied. Caching can reuse a previously resolved operation and reduce repeated inference.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "observe",
+        "act",
+        "extract",
+        "cache",
+        "selector",
+        "selfHeal"
+      ],
+      "adaptation": "Separate action discovery from execution, bind sensitive data afterward, and invalidate cached resolutions when their context changes. Use contextual repair only with uniqueness checks.",
+      "caveat": "Do not call cached selectors permanently valid or claim every UI change is automatically healed. Source version, page identity, parameter schema and observed context must be part of the cache contract.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S12",
+      "name": "Browser Use",
+      "directory": "browser-use",
+      "repository": "https://github.com/browser-use/browser-use.git",
+      "feature_ids": [
+        "F17",
+        "F27",
+        "F33",
+        "F43"
+      ],
+      "mechanism": "The agent loop supports configurable browser actions, model-related settings, structured output, failure/step controls and multi-action responses. Actions still run through a browser/session controller rather than being mere text descriptions.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "max_actions_per_step",
+        "max_failures",
+        "output_model_schema",
+        "controller",
+        "fallback",
+        "Agent"
+      ],
+      "adaptation": "Reuse configuration and orchestration patterns for bounded batches, model routing, typed extraction and budgets. Do not embed a second competing master controller beside DCU.",
+      "caveat": "Determine the exact model-fallback support in the pinned version. Provider failover must not widen data-egress permissions or cause duplicate external actions.",
+      "documentation": [
+        "https://docs.browser-use.com/customize/agent/all-parameters"
+      ],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S13",
+      "name": "Chrome DevTools MCP",
+      "directory": "chrome-devtools-mcp",
+      "repository": "https://github.com/ChromeDevTools/chrome-devtools-mcp.git",
+      "feature_ids": [
+        "F50",
+        "F51"
+      ],
+      "mechanism": "MCP tools expose DevTools browser diagnostics: network requests, console errors, performance traces and environment emulation. They provide evidence about what the browser did beyond its visible pixels.",
+      "read_first": [
+        "README.md",
+        "docs/tool-reference.md"
+      ],
+      "search_terms": [
+        "network",
+        "console",
+        "performance",
+        "emulate",
+        "sourceMap"
+      ],
+      "adaptation": "Expose a diagnostics adapter correlated with DCU run/action IDs. Use it in testing and failure analysis, not as a reason to collect unrelated personal browsing data.",
+      "caveat": "Attach only to an approved browser context. Debugging ports, request bodies and traces can contain credentials; filter access and redact exports.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S14",
+      "name": "WebMCP specification/examples",
+      "directory": "webmcp",
+      "repository": "https://github.com/webmachinelearning/webmcp.git",
+      "feature_ids": [
+        "F12"
+      ],
+      "mechanism": "Pages expose JavaScript functions or HTML forms as described, schema-bearing tools. The invocation occurs in the page context so site-owned logic can perform the operation and update its own UI, unlike a separate backend integration.",
+      "read_first": [
+        "README.md",
+        "implementation-status.md"
+      ],
+      "search_terms": [
+        "registerTool",
+        "modelContext",
+        "toolname",
+        "form",
+        "inputSchema"
+      ],
+      "adaptation": "Add runtime capability detection and origin-bound tool discovery to the browser adapter. Validate inputs and apply DCU policy before calling an approved page tool.",
+      "caveat": "This is an evolving web-platform interface, not automatically a standalone remote MCP server. Read implementation-status.md and test the installed browser; unsupported environments must fall back explicitly.",
+      "documentation": [
+        "https://developer.chrome.com/blog/webmcp-epp"
+      ],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S15",
+      "name": "Microsoft UFO",
+      "directory": "ufo",
+      "repository": "https://github.com/microsoft/UFO.git",
+      "feature_ids": [
+        "F13",
+        "F29",
+        "F35"
+      ],
+      "mechanism": "UFO combines host/application agents with UI and application-level operations. Its newer orchestration work represents cross-device/application tasks and dependencies as explicit graphs, allowing suitable independent work to be scheduled separately.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "AppAgent",
+        "HostAgent",
+        "Constellation",
+        "DAG",
+        "COM",
+        "dispatcher",
+        "api"
+      ],
+      "adaptation": "Reuse application-adapter and dependency-graph ideas. Keep the graph independent of Jev and enforce target/resource locks when scheduling ready nodes.",
+      "caveat": "Distinguish UFO generations and follow the implementation corresponding to the feature. Cross-device orchestration is not permission to mutate one shared desktop concurrently.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S16",
+      "name": "UI-TARS Desktop / Agent TARS",
+      "directory": "ui-tars-desktop",
+      "repository": "https://github.com/bytedance/UI-TARS-desktop.git",
+      "feature_ids": [
+        "F04",
+        "F05"
+      ],
+      "mechanism": "The project family combines model-driven UI interaction with browser/computer operators and different observation modes, including visual grounding and semantic browser evidence.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "operator",
+        "snapshot",
+        "screenshot",
+        "accessibility",
+        "grounding",
+        "browser"
+      ],
+      "adaptation": "Create one normalised observation/adapter interface that can accept UIA, DOM/accessibility and visual evidence while retaining each source and coordinate space.",
+      "caveat": "Do not flatten all operators into an assumed focus-free backend. Check the selected operator implementation and preserve evidence provenance when modalities disagree.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S17",
+      "name": "Microsoft OmniParser",
+      "directory": "omniparser",
+      "repository": "https://github.com/microsoft/OmniParser.git",
+      "feature_ids": [
+        "F05"
+      ],
+      "mechanism": "Screenshot parsing identifies interactable regions and adds text/icon descriptions so a controller can choose among labelled visual targets even where application accessibility data is weak.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "get_som_labeled_img",
+        "check_ocr_box",
+        "icon",
+        "caption",
+        "bbox"
+      ],
+      "adaptation": "Expose a lazily invoked perception adapter returning typed regions and source capture IDs. Attach an uncertainty score and require current geometry before any visual action.",
+      "caveat": "A detector bounding box does not prove clickability, goal relevance or authorisation. Review separate code/model-weight licences and requirements. Do not download weights or use OCR for every observation by default.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S18",
+      "name": "Agent S",
+      "directory": "agent-s",
+      "repository": "https://github.com/simular-ai/Agent-S.git",
+      "feature_ids": [
+        "F23",
+        "F28"
+      ],
+      "mechanism": "The original Agent S architecture uses experience-augmented hierarchical planning and an agent-computer interface. Later versions separate general planning responsibilities and specialised grounding/control components in different ways.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "Manager",
+        "Worker",
+        "memory",
+        "experience",
+        "grounding",
+        "planner"
+      ],
+      "adaptation": "Keep the task planner separate from the fast bounded controller; store only source-linked, verified reusable experience. Retrieve prior attempts as evidence, not authority.",
+      "caveat": "The memory idea in this specification is associated with the original architecture. Do not assume the newest default branch retains the same modules; pin the relevant version or use the paper as architectural inspiration.",
+      "documentation": [
+        "https://arxiv.org/abs/2410.08164",
+        "https://arxiv.org/abs/2504.00906"
+      ],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S19",
+      "name": "OpenAdapt",
+      "directory": "openadapt",
+      "repository": "https://github.com/OpenAdaptAI/OpenAdapt.git",
+      "feature_ids": [
+        "F30",
+        "F38",
+        "F46"
+      ],
+      "mechanism": "The reviewed project describes learning/replay from demonstrations with a reviewed/admitted workflow boundary and outcome evidence. The transferable pattern is to turn a human-demonstrated task into a reusable artefact whose execution and success are separately checked.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "demo",
+        "replay",
+        "admission",
+        "compile",
+        "verify",
+        "workflow"
+      ],
+      "adaptation": "Capture demonstrations only with consent, compile typed steps and parameters, run them against fixtures, then admit a version for replay through DCU adapters.",
+      "caveat": "This repository is the installer/CLI, not the compiler/runtime. Clone S28 openadapt-flow as well and follow its implementation. A recorded UI success banner is not independent evidence and replay is not automatic rollback.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S20",
+      "name": "Skyvern",
+      "directory": "skyvern",
+      "repository": "https://github.com/Skyvern-AI/skyvern.git",
+      "feature_ids": [
+        "F32",
+        "F54"
+      ],
+      "mechanism": "Browser tasks can be composed with workflow blocks such as iteration, HTTP/file processing and outputs, while live browser access gives a human an intervention path during a run.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "workflow",
+        "block",
+        "loop",
+        "file",
+        "http",
+        "live",
+        "takeover"
+      ],
+      "adaptation": "Add typed non-UI nodes to the workflow graph and a pause/lease/reobserve handover protocol. Keep application credentials and provider-specific infrastructure outside the graph definition.",
+      "caveat": "Do not require the whole platform to ship with DCU. Live human interaction must suspend the agent on that target; a view-only stream is not a complete takeover mechanism.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S21",
+      "name": "BrowserOS",
+      "directory": "browseros",
+      "repository": "https://github.com/browseros-ai/BrowserOS.git",
+      "feature_ids": [
+        "F35",
+        "F48"
+      ],
+      "mechanism": "The browser-agent environment exposes workflows and visibility into agent work, with support for independent browser work and inspecting a run. The useful pattern is explicit ownership of browser execution contexts with an observable history.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "parallel",
+        "workflow",
+        "trace",
+        "history",
+        "tab",
+        "agent"
+      ],
+      "adaptation": "Use separately owned contexts/workers and a common event timeline. Prefer a narrow adapter over forking/shipping a whole browser.",
+      "caveat": "Validate the current implementation before promising concurrency or replay semantics. Shared browser profiles may still share cookies, downloads and other mutable resources.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S22",
+      "name": "Nanobrowser",
+      "directory": "nanobrowser",
+      "repository": "https://github.com/nanobrowser/nanobrowser.git",
+      "feature_ids": [
+        "F23",
+        "F27"
+      ],
+      "mechanism": "A browser-extension agent separates planning and navigation responsibilities and supports configurable model/provider choices for agent roles.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "planner",
+        "navigator",
+        "model",
+        "provider",
+        "validator"
+      ],
+      "adaptation": "Use role-specific model configuration and clear planner/controller boundaries; port only interfaces needed by DCU.",
+      "caveat": "Extension permissions and browser-profile access are separate security decisions. Configurable providers do not imply local inference or unrestricted cross-provider data sharing.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S23",
+      "name": "Windows-MCP",
+      "directory": "windows-mcp",
+      "repository": "https://github.com/CursorTouch/Windows-MCP.git",
+      "feature_ids": [
+        "F44"
+      ],
+      "mechanism": "The reviewed server exposes Windows capabilities through MCP and documents optional authenticated remote transport, including bearer/OAuth-PKCE related setup and tool restrictions.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "OAuth",
+        "PKCE",
+        "bearer",
+        "TLS",
+        "transport",
+        "tool"
+      ],
+      "adaptation": "Study its authentication and transport wiring for an opt-in DCU remote service; keep DCU input/capture internals.",
+      "caveat": "Verify available authentication modes at the checkout. Its desktop input mechanism is not a substitute for DCU background guarantees. Remote transport must remain disabled unless configured.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S24",
+      "name": "Midscene",
+      "directory": "midscene",
+      "repository": "https://github.com/web-infra-dev/midscene.git",
+      "feature_ids": [
+        "F47"
+      ],
+      "mechanism": "Semantic assertions and waits evaluate a natural-language condition against current UI evidence, supplementing deterministic selectors and values for visually expressed results.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "aiAssert",
+        "aiWaitFor",
+        "assert",
+        "screenshot",
+        "report"
+      ],
+      "adaptation": "Offer evidence-bearing semantic assertions as one verifier type. Use deterministic application/server/file checks when those exist.",
+      "caveat": "A model-based assertion can be wrong. It is not sufficient by itself to confirm a high-impact external action, nor should it be labelled deterministic.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S25",
+      "name": "WindTunnel",
+      "directory": "windtunnel",
+      "repository": "https://github.com/nekuda-ai/WindTunnel.git",
+      "feature_ids": [
+        "F53"
+      ],
+      "mechanism": "The benchmark harness runs configured web-agent/model combinations against a defined task environment and records outcomes and timings for comparison, including the associated WebMCP benchmark context.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "benchmark",
+        "task",
+        "runner",
+        "metric",
+        "success",
+        "webmcp"
+      ],
+      "adaptation": "Use a versioned harness with shared fixtures, explicit task-success oracles, timing boundaries and repeatable model/adapter configurations.",
+      "caveat": "Do not transfer a published leaderboard number into DCU. Re-run on DCU with failed/refused tasks retained in the denominator and publish local environment/version details.",
+      "documentation": [
+        "https://webmcp.com/benchmark"
+      ],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S26",
+      "name": "json-render",
+      "directory": "json-render",
+      "repository": "https://github.com/vercel-labs/json-render.git",
+      "feature_ids": [
+        "F59"
+      ],
+      "mechanism": "The experimental Jev integration chooses/composes among prepared component candidates from a defined UI catalogue. Text and data must be supplied independently; the model does not make arbitrary UI code safe by generating it.",
+      "read_first": [
+        "README.md"
+      ],
+      "search_terms": [
+        "jev",
+        "catalog",
+        "candidate",
+        "compose",
+        "schema"
+      ],
+      "adaptation": "Use a schema-restricted component catalogue with allowlisted properties/actions for optional review and launch interfaces.",
+      "caveat": "The reviewed Jev documentation labels the integration experimental/unreleased. Build against the actual pinned API or keep this optional feature blocked with a precise reason.",
+      "documentation": [
+        "https://json-render.dev/docs/jev"
+      ],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S27",
+      "name": "Liveblocks",
+      "directory": "liveblocks",
+      "repository": "https://github.com/liveblocks/liveblocks.git",
+      "feature_ids": [
+        "F60"
+      ],
+      "mechanism": "Sync exposes collaboration primitives for shared state and presence. Client integrations support collaborative updates and user-specific history/undo; server-side infrastructure manages authenticated room access and synchronisation.",
+      "read_first": [
+        "README.md",
+        "examples/",
+        "docs/"
+      ],
+      "search_terms": [
+        "presence",
+        "history",
+        "undo",
+        "storage",
+        "room",
+        "authorize"
+      ],
+      "adaptation": "Use an optional collaboration adapter for shared review state, with authoritative execution leases outside replicated UI state.",
+      "caveat": "Cloning SDKs/examples does not itself reproduce the hosted service. The inspected repository identifies mixed component licences; review the exact imported packages. Document undo does not undo emails, purchases or arbitrary desktop changes.",
+      "documentation": [
+        "https://liveblocks.io/sync"
+      ],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    },
+    {
+      "id": "S28",
+      "name": "OpenAdapt Flow compiler/runtime",
+      "directory": "openadapt-flow",
+      "repository": "https://github.com/OpenAdaptAI/openadapt-flow.git",
+      "feature_ids": [
+        "F30",
+        "F38",
+        "F46"
+      ],
+      "mechanism": "The OpenAdapt root repository explicitly delegates compilation and execution to openadapt-flow. Flow compiles a demonstration into a program whose healthy replay path does not need a generative-model API. Governed verification checks declared effects through independent system-of-record reads. An apparently successful UI write that the independent read refutes ends in reconciliation rather than a blind retry.",
+      "read_first": [
+        "README.md",
+        "docs/EFFECT_KIT.md",
+        "docs/TUTORIAL.md"
+      ],
+      "search_terms": [
+        "compile",
+        "admit",
+        "effect",
+        "verifier",
+        "RECONCILIATION_REQUIRED",
+        "runtime"
+      ],
+      "adaptation": "Read this implementation alongside S19. Transfer the separate effect contract, reviewed program version, deterministic healthy replay and independent verification/reconciliation concepts to DCU.",
+      "caveat": "A fixture-specific generated effect proposal requires review for a real application. Do not copy product-specific certification, commercial labels or evidence-tier names into DCU as if DCU had earned them.",
+      "documentation": [],
+      "review_basis": "Earlier linked catalogue plus targeted source checks; verify at the cloned commit before reuse",
+      "requested_ref": null
+    }
+  ],
+  "documentation_only": {
+    "typesafe-docs": [
+      "https://docs.typesafe.ai/introduction",
+      "https://docs.typesafe.ai/sdk",
+      "https://docs.typesafe.ai/primitives/choice",
+      "https://docs.typesafe.ai/primitives/score",
+      "https://docs.typesafe.ai/primitives/noul",
+      "https://docs.typesafe.ai/confidence",
+      "https://docs.typesafe.ai/model-jaggedness/jev-1.13"
+    ]
+  },
+  "excluded_unresolved_repositories": [
+    {
+      "repository": "https://github.com/milind-soni/ti",
+      "reason": "Exact implementation not retrieved in earlier review"
+    },
+    {
+      "repository": "https://github.com/dabit3/launcher",
+      "reason": "Successor named by archived example; README not retrievable in spec-writing pass"
+    }
+  ]
+}

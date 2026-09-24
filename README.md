@@ -53,7 +53,7 @@ Run diagnostics at any time:
 
 | Tool | What it does |
 | --- | --- |
-| `list_apps` | Lists each visible top-level window with its PID, HWND, title, and stable `window_id`. |
+| `list_apps` | Lists each visible top-level window with its PID, HWND, title, `window_id`, and lifetime-bound `target_id` when available. |
 | `get_app_state` | Returns an accessibility-tree snapshot, labeled elements, actions, values, and an optional annotated screenshot. |
 | `click` | Uses UIA patterns or a message click and reports an observed effect. |
 | `type_text` | Types through control messages or UIA value patterns. |
@@ -66,7 +66,21 @@ Run diagnostics at any time:
 | `hide_cursor` | Hides the cosmetic virtual cursor. |
 | `health_check` | Checks the desktop session, UIA thread, and overlay. |
 
-If more than one window matches a name, title, or PID, DCU returns an ambiguity error. Use the `window_id` from `list_apps` to select the exact window.
+`list_apps` also returns an opaque `target_id` and a lifetime epoch for each window whose
+process creation identity was read successfully. The target ID is bound to the current
+process birth and HWND lifetime; it is not a PID alias. Cached element IDs are rejected
+when that identity becomes stale. A missing process-birth value fails closed and is never
+cached as a PID-only target.
+
+Use `window_id` for the existing exact-window selector or the prefixed `target_id`
+(for example, `dcu-target-...`) for an opaque lifetime-bound selector. A bare 32-character
+hexadecimal title remains an ordinary title selector. Explicit selectors never fall through
+to title or process-name matching. Legacy process-name selection can retain a cached element only when the
+original owner is still current and a native owner-chain relation is proven; otherwise
+DCU asks for a fresh snapshot. Filtered or hidden-window enumeration does not destroy a
+tracked target.
+
+If more than one window matches a name, title, or PID, DCU returns an ambiguity error. Use the `window_id` or `target_id` from `list_apps` to select the exact window.
 
 Snapshot-based element clicks read the current UIA bounds before acting. Raw snapshot coordinates and drag points are translated when the window moves. Take a new snapshot after a resize when the application uses a responsive layout.
 
