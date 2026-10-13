@@ -26,6 +26,13 @@ class SettingsServerTests(unittest.TestCase):
 
 
 class InputSettingsTests(unittest.TestCase):
+    def test_omitted_settings_keep_virtual_cursor_and_disable_optional_input_modes(self):
+        clean = SETTINGS.clean_settings({})
+        self.assertTrue(clean["ShowVirtualCursor"])
+        self.assertTrue(clean["EnableFocusGuard"])
+        for key in ("UseRealCursor", "GameMode", "HumanizedInput", "FastInput"):
+            self.assertFalse(clean[key])
+
     def test_every_toggle_combination_survives_settings_validation(self):
         keys = ("UseRealCursor", "GameMode", "HumanizedInput", "FastInput", "ShowVirtualCursor")
         for mask in range(32):

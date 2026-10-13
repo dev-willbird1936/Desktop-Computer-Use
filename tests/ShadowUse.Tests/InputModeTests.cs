@@ -5,6 +5,19 @@ namespace ShadowUse.Tests;
 
 public sealed class InputModeTests
 {
+    [Fact]
+    public void OmittedSettingsDefaultToVirtualCursorWithOptionalInputModesDisabled()
+    {
+        var settings = System.Text.Json.JsonSerializer.Deserialize<ShadowSettings>("{}")!;
+        Assert.True(settings.ShowVirtualCursor);
+        Assert.False(settings.UseRealCursor);
+        Assert.False(settings.GameMode);
+        Assert.False(settings.HumanizedInput);
+        Assert.False(settings.FastInput);
+        Assert.Equal(new InputMode(false, false), InputMode.Resolve(settings));
+        Assert.True(settings.EnableFocusGuard);
+    }
+
     public static IEnumerable<object[]> ToggleCombinations()
     {
         for (int mask = 0; mask < 32; mask++)

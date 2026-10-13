@@ -134,18 +134,48 @@ DCU reads `settings.json` next to the executable, then falls back to `%APPDATA%\
 | `EnableFocusGuard` | `true` | Restores the foreground window and caret after an action takes them. |
 | `PostActionDelayMs` | `150` | Wait time before the follow-up snapshot. |
 
-### Input toggles
+### Input toggles and defaults
 
-| Key | Default | Meaning |
+**Default: background input with the virtual cursor visible. Real-cursor input, game mode, humanized input, and fast input are disabled.** Start with this configuration for ordinary desktop automation while you continue working:
+
+```json
+{
+  "ShowVirtualCursor": true,
+  "UseRealCursor": false,
+  "GameMode": false,
+  "HumanizedInput": false,
+  "FastInput": false
+}
+```
+
+These are the input-toggle defaults, not a request to disable existing focus protection or overwrite your saved preferences. They apply when settings are omitted; an existing `settings.json` can override them.
+
+| Toggle | Default | What it does | When to enable it |
+| --- | --- | --- | --- |
+| `ShowVirtualCursor` | `true` | Shows the green marker for background actions. It hides after one minute without activity. | Leave on to see what DCU is doing. Turn off if the marker is distracting or not needed. |
+| `UseRealCursor` | `false` | Uses your actual cursor/keyboard and brings the selected window forward instead of sending background messages. | Enable when the target ignores background actions, needs real modifier keys, or is a raw-input game. Your cursor and keyboard are no longer independently available during those actions. |
+| `GameMode` | `false` | Uses the game input profile and retains foreground/cursor after real input, avoiding mouse-look camera resets. | Enable for gameplay or mouse-look targets. Usually combine with `UseRealCursor`; it does not enable real input or unlock tools by itself. |
+| `HumanizedInput` | `false` | Uses curved foreground mouse motion and varied typing/key timing. | Enable when you want natural-looking motion or less uniform pacing. It can add latency and is not a promise of bypassing application input restrictions. |
+| `FastInput` | `false` | Shortens fixed delays and pacing in either input mode. Explicit key-hold durations and observation timeouts stay unchanged. | Enable for responsive targets, repetitive tasks, or latency-sensitive gameplay. Leave off if the target misses short taps; use longer explicit holds or waits when needed. |
+
+**All five toggles can be combined.** No combination is rejected or silently changes the cursor choice. Humanization and game foreground-retention apply only when real-cursor input is selected; the virtual marker applies to background actions. Fast pacing works with either mode. Automated checks cover all 32 setting combinations and their per-call overrides, not every application's compatibility.
+
+The background “own cursor” is a **cosmetic overlay**, not a second hardware pointer. `ShowVirtualCursor` controls its visibility; `UseRealCursor` controls how input is delivered. Enabling game mode, humanization, or fast input never takes the real cursor by itself. Raw-input games can still require real-cursor input.
+
+### Recommended combinations
+
+Start with the defaults above, then enable only what the task needs. Other input toggles remain at their defaults.
+
+| Task | Enable | Reason |
 | --- | --- | --- |
-| `UseRealCursor` | `false` | Off: background UIA/messages and a cosmetic cursor. On: activate the selected window and inject real system-cursor/keyboard input. |
-| `GameMode` | `false` | Use shorter activation settles and retain foreground/cursor after real input, avoiding mouse-look camera resets. Does not enable real input or gate tool access. |
-| `HumanizedInput` | `false` | Shape foreground motion and key timing. Never silently turns a background call into foreground input. |
-| `FastInput` | `false` | Shorten fixed waits and pacing. Does not shorten an explicitly requested key-hold duration or observation timeout. |
+| Ordinary background desktop work | Nothing extra | Keeps the real cursor available and shows background actions with the virtual marker. |
+| Faster background desktop work | `FastInput` | Reduces pacing without taking the real cursor. |
+| An app or shortcut that rejects background input | `UseRealCursor` | Delivers real system input; pause your own cursor/keyboard use while it acts. |
+| Gameplay or mouse-look | `UseRealCursor` + `GameMode` | Uses real input and avoids restoring the cursor/foreground after each action. |
+| Natural-looking foreground automation | `UseRealCursor` + `HumanizedInput` | Adds curved movement and varied timing; add `GameMode` only for game-style foreground retention. |
+| Latency-sensitive gameplay | `UseRealCursor` + `GameMode` + `FastInput` | Favors quick reactions; optionally add `HumanizedInput` for faster humanized motion. |
 
-All five toggles can be combined: no combination is rejected or silently changes the cursor choice. Humanization and game foreground-retention apply when real-cursor input is selected; the virtual marker is for background actions. Fast pacing works with either delivery mode. Automated checks cover all 32 setting combinations and their per-call overrides.
-
-The background “own cursor” is a **cosmetic overlay**, not a second hardware pointer. `ShowVirtualCursor` controls its visibility; `UseRealCursor` controls how input is delivered.
+`ShowVirtualCursor` can stay enabled in every configuration; it does not affect real input and is used for background actions. Foreground actions still share the single system cursor and can be interrupted by user activity.
 
 Per-call `input_mode` overrides the cursor default:
 
