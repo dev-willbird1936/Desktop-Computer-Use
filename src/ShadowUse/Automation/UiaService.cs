@@ -114,9 +114,11 @@ public sealed class UiaService
     private readonly SnapshotCache _snapshots = new();
     private int _revision;
     private int _elementCounter;
-    private readonly string _elementNamespace = Guid.NewGuid().ToString("N")[..8];
+    private readonly string _elementNamespace = Guid.NewGuid().ToString("N");
 
-    public UiaService(UiaThread uia) => _uia = uia;
+    private readonly WindowUiaWorkers? _workers;
+    public UiaService(UiaThread uia, WindowUiaWorkers? workers = null) { _uia = uia; _workers = workers; }
+    private UiaThread Worker(IntPtr hwnd) => _workers?.ForWindow(hwnd) ?? _uia;
 
     private static IUIAutomation CreateUia()
     {
@@ -168,6 +170,7 @@ public sealed class UiaService
                 return true;
             }, IntPtr.Zero);
             _snapshots.RemoveInvalidWindows(NativeMethods.IsWindow);
+            _workers?.Prune();
             return list.ToArray();
         }, ct);
 
@@ -225,6 +228,20 @@ public sealed class UiaService
         return true;
     }
 
+    // Providers can return E_FAIL while a newly shown window initializes.
+    // Retry only the read; never retry a dispatched mutation.
+    private static IUIAutomationElement ReadRoot(IUIAutomation uia, IntPtr hwnd)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { return uia.ElementFromHandle(hwnd); }
+            catch (System.Runtime.InteropServices.COMException ex) when (ex.HResult == unchecked((int)0x80004005) && attempt < 2)
+            {
+                Thread.Sleep(25);
+            }
+        }
+    }
+
     // ---------- Snapshot ----------
 
     // Ids must match ControlTypeName below exactly (they previously drifted, silently
@@ -259,10 +276,10 @@ public sealed class UiaService
     ];
 
     public Task<Snapshot> SnapshotAsync(AppTarget app, int maxNodes = 1200, int maxDepth = 48, int textLimit = 500, CancellationToken ct = default)
-        => _uia.InvokeAsync(() =>
+        => Worker(app.Hwnd).InvokeAsync(() =>
         {
             var uia = CreateUia();
-            IUIAutomationElement root = uia.ElementFromHandle(app.Hwnd);
+            IUIAutomationElement root = ReadRoot(uia, app.Hwnd);
             var revision = Interlocked.Increment(ref _revision);
             NativeMethods.GetWindowRect(app.Hwnd, out var bounds);
 
@@ -365,7 +382,7 @@ public sealed class UiaService
     // ---------- Element resolution ----------
 
     public Task<IUIAutomationElement?> ResolveElementAsync(IntPtr hwnd, ElementInfo info, CancellationToken ct = default)
-        => _uia.InvokeAsync(() =>
+        => Worker(hwnd).InvokeAsync(() =>
         {
             var uia = CreateUia();
             var root = uia.ElementFromHandle(hwnd);
@@ -396,8 +413,8 @@ public sealed class UiaService
 
     public Task<ElementFrame?> GetElementFrameAsync(
         IUIAutomationElement element,
-        CancellationToken ct = default)
-        => _uia.InvokeAsync(() =>
+        CancellationToken ct = default, IntPtr hwnd = default)
+        => Worker(hwnd).InvokeAsync(() =>
         {
             try
             {
@@ -419,7 +436,7 @@ public sealed class UiaService
         }, ct);
 
     public Task<IUIAutomationElement?> FindByTextAsync(IntPtr hwnd, string text, CancellationToken ct = default)
-        => _uia.InvokeAsync(() =>
+        => Worker(hwnd).InvokeAsync(() =>
         {
             var uia = CreateUia();
             var root = uia.ElementFromHandle(hwnd);
@@ -429,7 +446,7 @@ public sealed class UiaService
             {
                 var el = all.GetElement(i);
                 string name;
-                try { name = el.CurrentName; } catch { continue; }
+                try { name = el.CurrentName ?? ""; } catch { continue; }
                 if (name.Equals(text, StringComparison.OrdinalIgnoreCase)) return el;
                 if (partial == null && name.Contains(text, StringComparison.OrdinalIgnoreCase)) partial = el;
             }

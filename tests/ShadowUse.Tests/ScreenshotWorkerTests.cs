@@ -89,6 +89,26 @@ public sealed class ScreenshotWorkerTests
     }
 
     [Fact]
+    public async Task BlockedCaptureDoesNotDisableOtherWindows()
+    {
+        var type = typeof(UiaService).Assembly.GetType("ShadowUse.Capture.ScreenshotService")!;
+        var method = type.GetMethod("RunWindowCaptureWorker", BindingFlags.Static | BindingFlags.NonPublic)!;
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var completed = new ManualResetEventSlim();
+        Func<Bitmap?> blocked = () => { entered.Set(); release.Wait(); completed.Set(); return null; };
+        var first = Task.Run(() => method.Invoke(null, [(IntPtr)1001, blocked, 50]));
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(2)));
+            Assert.Null(await first);
+            using var other = (Bitmap?)method.Invoke(null, [(IntPtr)1002, (Func<Bitmap?>)(() => new Bitmap(1, 1)), 1000]);
+            Assert.NotNull(other);
+        }
+        finally { release.Set(); Assert.True(completed.Wait(TimeSpan.FromSeconds(2))); }
+    }
+
+    [Fact]
     public void DisposeLateCapture_DisposesSuccessfulResult()
     {
         var screenshotType = typeof(UiaService).Assembly.GetType("ShadowUse.Capture.ScreenshotService")!;

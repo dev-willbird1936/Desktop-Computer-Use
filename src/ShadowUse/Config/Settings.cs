@@ -30,6 +30,15 @@ public sealed class ShadowSettings
     /// <summary>Extra delay (ms) after each action before the follow-up snapshot.</summary>
     public int PostActionDelayMs { get; set; } = 150;
 
+    /// <summary>Use the system cursor and foreground input. False keeps background UIA/messages.</summary>
+    public bool UseRealCursor { get; set; } = false;
+    public bool GameMode { get; set; } = false;
+    public bool HumanizedInput { get; set; } = false;
+    public bool FastInput { get; set; } = false;
+    public double HumanizedMouseSpeed { get; set; } = 1;
+    public double HumanizedTypingSpeed { get; set; } = 1;
+    public double HumanizedTypoRate { get; set; } = 0;
+
     public static ShadowSettings Load()
     {
         foreach (var path in Candidates())
@@ -51,13 +60,17 @@ public sealed class ShadowSettings
     private void Normalize()
     {
         PostActionDelayMs = Math.Clamp(PostActionDelayMs, 0, 5_000);
+        HumanizedMouseSpeed = double.IsFinite(HumanizedMouseSpeed) ? Math.Clamp(HumanizedMouseSpeed, 0.25, 4) : 1;
+        HumanizedTypingSpeed = double.IsFinite(HumanizedTypingSpeed) ? Math.Clamp(HumanizedTypingSpeed, 0.25, 4) : 1;
+        HumanizedTypoRate = double.IsFinite(HumanizedTypoRate) ? Math.Clamp(HumanizedTypoRate, 0, 0.2) : 0;
     }
 
     private static IEnumerable<string> Candidates()
     {
         yield return Path.Combine(AppContext.BaseDirectory, "settings.json");
         yield return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            Environment.GetEnvironmentVariable("APPDATA") is { Length: > 0 } appData
+                ? appData : Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "shadow-use", "settings.json");
     }
 }

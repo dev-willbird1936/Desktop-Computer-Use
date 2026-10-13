@@ -16,7 +16,8 @@ namespace ShadowUse.Capture;
 /// </summary>
 internal static class ScreenshotService
 {
-    private static int _printWindowWorkerBusy;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<IntPtr, byte> ActiveCaptures = new();
+    private static readonly SemaphoreSlim CaptureCapacity = new(8, 8);
 
     /// <summary>Capture a window as PNG bytes. Returns null if all methods fail.</summary>
     public static byte[]? CaptureWindow(
@@ -69,13 +70,13 @@ internal static class ScreenshotService
     /// <summary>PrintWindow sends WM_PRINT/WM_PRINTCLIENT to hwnd and blocks until it's
     /// handled — a hung target's message queue can wedge this call indefinitely. Run it on
     /// a worker with a timeout so get_app_state can return a clean null result. Only one
-    /// worker may remain blocked, and any bitmap returned after the timeout is disposed by
+    /// worker per window may remain blocked (eight total), and late bitmaps are disposed by
     /// a continuation.</summary>
     private static Bitmap? TryPrintWindow(IntPtr hwnd, NativeMethods.RECT rect)
     {
         try
         {
-            return RunPrintWindowWorker(() =>
+            return RunWindowCaptureWorker(hwnd, () =>
             {
                 var bmp = new Bitmap(rect.Width, rect.Height, PixelFormat.Format32bppArgb);
                 using var g = Graphics.FromImage(bmp);
@@ -91,22 +92,33 @@ internal static class ScreenshotService
     }
 
     private static Bitmap? RunPrintWindowWorker(Func<Bitmap?> capture, int timeoutMs)
-    {
-        if (Interlocked.CompareExchange(ref _printWindowWorkerBusy, 1, 0) != 0)
-            return null;
+        => RunWindowCaptureWorker(IntPtr.Zero, capture, timeoutMs);
 
+    private static Bitmap? RunWindowCaptureWorker(IntPtr hwnd, Func<Bitmap?> capture, int timeoutMs)
+    {
+        if (!ActiveCaptures.TryAdd(hwnd, 0)) return null;
+        if (!CaptureCapacity.Wait(0))
+        {
+            ActiveCaptures.TryRemove(hwnd, out _);
+            return null;
+        }
         Task<Bitmap?> task;
         try
         {
             task = Task.Run(() =>
             {
                 try { return capture(); }
-                finally { Interlocked.Exchange(ref _printWindowWorkerBusy, 0); }
+                finally
+                {
+                    ActiveCaptures.TryRemove(hwnd, out _);
+                    CaptureCapacity.Release();
+                }
             });
         }
         catch
         {
-            Interlocked.Exchange(ref _printWindowWorkerBusy, 0);
+            ActiveCaptures.TryRemove(hwnd, out _);
+            CaptureCapacity.Release();
             throw;
         }
 
@@ -127,6 +139,15 @@ internal static class ScreenshotService
             completed.Result?.Dispose();
         else
             _ = completed.Exception;
+    }
+
+    internal static (Bitmap Bitmap, NativeMethods.RECT Rect)? CaptureWindowForVision(IntPtr hwnd)
+    {
+        if (!NativeMethods.IsWindow(hwnd) || NativeMethods.IsIconic(hwnd)
+            || !NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
+            return null;
+        var bitmap = TryPrintWindow(hwnd, rect);
+        return bitmap == null ? null : (bitmap, rect);
     }
 
     private static Bitmap? TryCopyFromScreen(NativeMethods.RECT rect)

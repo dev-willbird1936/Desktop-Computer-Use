@@ -15,6 +15,9 @@ internal static class Program
         if (args.Contains("--doctor"))
             return Doctor();
 
+        var settings = Config.ShadowSettings.Load();
+        InputPace.GlobalFast = settings.FastInput;
+        InteractiveInput.GameProfile = settings.GameMode;
         var builder = Host.CreateApplicationBuilder(args);
 
         // stdout is the MCP channel — all logging goes to stderr
@@ -24,9 +27,11 @@ internal static class Program
 
         var uiaThread = new UiaThread();
         builder.Services.AddSingleton(uiaThread);
+        builder.Services.AddSingleton<WindowUiaWorkers>();
         builder.Services.AddSingleton<UiaService>();
-        builder.Services.AddSingleton(new BackgroundInput(uiaThread));
-        builder.Services.AddSingleton(Config.ShadowSettings.Load());
+        builder.Services.AddSingleton<BackgroundInput>();
+        builder.Services.AddSingleton(settings);
+        builder.Services.AddSingleton<ShadowUse.Vision.GameFrameStore>();
         builder.Services.AddSingleton(_ => VirtualCursorOverlay.Instance);
 
         builder.Services
@@ -34,10 +39,27 @@ internal static class Program
             {
                 o.ServerInfo = new() { Name = "dcu", Version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "unknown" };
                 o.ServerInstructions = """
-                    Background computer control for Windows. All actions are focus-free:
-                    UIA patterns or posted window messages — the real cursor never moves,
-                    the foreground never changes, and target apps never count as focused.
-                    A cosmetic virtual cursor shows actions and hides after one idle minute.
+                    Windows computer control. Default input_mode=background uses UIA patterns
+                    or posted messages without moving the real cursor; focus-changing UIA
+                    fallbacks remain possible. A cosmetic virtual cursor hides after one idle minute.
+                    input_mode=foreground explicitly activates the selected window and uses the
+                    real cursor/keyboard through SendInput. UseRealCursor changes that default.
+                    HumanizedInput shapes foreground motion/timing; FastInput shortens pacing.
+                    You can override mode and pace on each action without editing settings.
+                    input_mode=humanized explicitly selects humanized foreground input even
+                    when the HumanizedInput setting is off. foreground_plain disables it for one call.
+                    Games/raw-input apps commonly require foreground mode. game_* tools work
+                    without a UIA tree and are always callable; GameMode selects the game input
+                    profile, not a tool-access gate. Use game_screenshot and pass its
+                    source_frame_id for image coordinates. For GPU capture that fails in background,
+                    game_screenshot(bring_to_front=true) explicitly activates the selected window.
+                    Never infer success from dispatch:
+                    check effect or then_screenshot. Use bounded game_key holds; do not leave
+                    keys down across agent calls.
+                    Multiple agents can observe and act on separate windows. Element ids survive
+                    subsequent snapshots within bounded history, but are specific to this server.
+                    Same-window actions/sequences queue across DCU processes; real-cursor input
+                    also queues for the one shared system cursor. No persistent controller claim.
 
                     Workflow: list_apps → select by window_id when needed → get_app_state(app) → act by element id
                     (click/type_text/press_key/scroll/set_value/drag) → re-snapshot.

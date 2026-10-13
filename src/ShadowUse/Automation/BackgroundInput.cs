@@ -9,19 +9,21 @@ namespace ShadowUse.Automation;
 
 /// <summary>
 /// Focus-free input: UIA patterns first, PostMessage/SendMessage window messages second.
-/// Never SendInput, never SetCursorPos, never SetFocus — the real cursor and the OS
-/// foreground are never touched, so the user can keep working in other apps and the
-/// target app never counts itself as focused.
+/// Never injects SendInput or moves the real cursor. Accessibility providers can
+/// still activate their application; optional text fallback and focus restoration
+/// are controlled by settings.
 /// </summary>
 public sealed class BackgroundInput
 {
     private readonly UiaThread _uia;
     private readonly ConcurrentDictionary<IntPtr, AddressBarInput> _addressBarInputs = new();
-    public BackgroundInput(UiaThread uia) => _uia = uia;
+    private readonly WindowUiaWorkers? _workers;
+    public BackgroundInput(UiaThread uia, WindowUiaWorkers? workers = null) { _uia = uia; _workers = workers; }
+    private UiaThread Worker(IntPtr hwnd) => _workers?.ForWindow(hwnd) ?? _uia;
 
     public enum MouseButton { Left, Right, Middle }
 
-    public sealed record InputResult(bool Success, string Method, string Detail = "");
+    public sealed record InputResult(bool Success, string Method, string Detail = "", bool InputSent = false, long ElapsedMs = 0, string? InterruptionReason = null);
     private sealed record AddressBarInput(string? Text);
 
     private void PruneDeadAddressBarEntries()
@@ -40,7 +42,7 @@ public sealed class BackgroundInput
         // Tier 1: UIA patterns (left button only; right/middle have no semantic pattern)
         if (element != null && button == MouseButton.Left)
         {
-            var viaPattern = await _uia.InvokeAsync(() =>
+            var viaPattern = await Worker(hwnd).InvokeAsync(() =>
             {
                 if (element.GetCurrentPattern(UiaIds.InvokePattern) is IUIAutomationInvokePattern invoke)
                 { invoke.Invoke(); return "uia_invoke"; }
@@ -57,7 +59,7 @@ public sealed class BackgroundInput
                 if (clickCount > 1)
                     for (int i = 1; i < clickCount; i++)
                     {
-                        await _uia.InvokeAsync(() =>
+                        await Worker(hwnd).InvokeAsync(() =>
                         {
                             if (element.GetCurrentPattern(UiaIds.InvokePattern) is IUIAutomationInvokePattern inv) inv.Invoke();
                             return 0;
@@ -106,12 +108,12 @@ public sealed class BackgroundInput
             for (int i = 0; i < clickCount; i++)
             {
                 NativeMethods.PostMessageW(target, (uint)down, (IntPtr)flag, lParam);
-                Thread.Sleep(35);
+                Thread.Sleep(InputPace.Ms(35));
                 NativeMethods.PostMessageW(target, (uint)up, IntPtr.Zero, lParam);
-                if (i + 1 < clickCount) Thread.Sleep(50);
+                if (i + 1 < clickCount) Thread.Sleep(InputPace.Ms(50));
             }
-            Thread.Sleep(50);
-            return new InputResult(true, "postmessage", $"({screenX},{screenY}) x{clickCount}");
+            Thread.Sleep(InputPace.Ms(50));
+            return new InputResult(true, "postmessage", $"({screenX},{screenY}) x{clickCount}", true);
         }, ct);
     }
 
@@ -172,7 +174,7 @@ public sealed class BackgroundInput
         // Replace the address value through UIA and verify the observable value instead.
         if (_addressBarInputs.ContainsKey(hwnd))
         {
-            var addressValue = await _uia.InvokeAsync(() =>
+            var addressValue = await Worker(hwnd).InvokeAsync(() =>
             {
                 var address = FindChromiumAddressBar(hwnd);
                 if (address?.GetCurrentPattern(UiaIds.ValuePattern) is not IUIAutomationValuePattern value
@@ -197,7 +199,7 @@ public sealed class BackgroundInput
         }
 
         // Tier 1: find a text-entry child HWND (edit/richtext/document) and EM_REPLACESEL into it
-        var editHwnd = await _uia.InvokeAsync(() => FindTextEntryHwnd(hwnd), ct).ConfigureAwait(false);
+        var editHwnd = await Task.Run(() => FindTextEntryHwnd(hwnd), ct).ConfigureAwait(false);
         if (editHwnd != IntPtr.Zero)
         {
             // (-1,-1) is NOT "caret to end" — that's EM_SETSEL's documented "deselect in
@@ -221,7 +223,7 @@ public sealed class BackgroundInput
 
         // Tier 2: key-event stream into a render widget (Chromium/Electron) — the DOM
         // sees genuine key/input events, so web forms register the text
-        var renderHwnd = await _uia.InvokeAsync(() => FindRenderWidgetHwnd(hwnd), ct).ConfigureAwait(false);
+        var renderHwnd = await Task.Run(() => FindRenderWidgetHwnd(hwnd), ct).ConfigureAwait(false);
         if (renderHwnd != IntPtr.Zero)
         {
             await Task.Run(() =>
@@ -253,7 +255,7 @@ public sealed class BackgroundInput
         // Tier 3: UIA SetValue append (gated — observed to foreground some apps)
         if (allowUiaTextFallback)
         {
-            var ok = await _uia.InvokeAsync(() =>
+            var ok = await Worker(hwnd).InvokeAsync(() =>
             {
                 var el = FindTextEntryElement(hwnd);
                 if (el?.GetCurrentPattern(UiaIds.ValuePattern) is IUIAutomationValuePattern vp
@@ -445,7 +447,7 @@ public sealed class BackgroundInput
         bool isSelectAddress = vk == 'L' && mods.Length == 1 && mods[0] == NativeMethods.VK_CONTROL;
         if (isSelectAddress)
         {
-            var selected = await _uia.InvokeAsync(() =>
+            var selected = await Worker(hwnd).InvokeAsync(() =>
             {
                 var address = FindChromiumAddressBar(hwnd);
                 if (address == null) return false;
@@ -467,7 +469,7 @@ public sealed class BackgroundInput
                 return new InputResult(false, "uia_address_navigate", "No verified address-bar text is pending");
             }
 
-            var addressFocused = await _uia.InvokeAsync(() =>
+            var addressFocused = await Worker(hwnd).InvokeAsync(() =>
             {
                 var address = FindChromiumAddressBar(hwnd);
                 if (address == null) return false;
@@ -491,7 +493,7 @@ public sealed class BackgroundInput
             while (DateTime.UtcNow < deadline)
             {
                 ct.ThrowIfCancellationRequested();
-                bool navigated = await _uia.InvokeAsync(
+                bool navigated = await Worker(hwnd).InvokeAsync(
                     () => ChromiumDocumentHasUrl(hwnd, pending.Text), ct).ConfigureAwait(false);
                 if (navigated)
                 {
@@ -554,7 +556,7 @@ public sealed class BackgroundInput
             && actualUri.Equals(expectedUri);
     }
 
-    private static (int vk, int ch, int[] mods) ParseKey(string key)
+    internal static (int vk, int ch, int[] mods) ParseKey(string key)
     {
         if (string.IsNullOrEmpty(key)) throw new ArgumentException("key must not be empty");
         var mods = new List<int>();
@@ -575,6 +577,12 @@ public sealed class BackgroundInput
         var last = parts[^1].Trim();
         int vk = last switch
         {
+            "shift" or "lshift" or "rshift" => NativeMethods.VK_SHIFT,
+            "ctrl" or "control" or "lctrl" or "rctrl" => NativeMethods.VK_CONTROL,
+            "alt" or "lalt" or "ralt" => NativeMethods.VK_MENU,
+            "win" or "super" => NativeMethods.VK_LWIN,
+            "insert" => 0x2D,
+            "capslock" => 0x14,
             "return" or "enter" => 0x0D,
             "tab" => 0x09,
             "esc" or "escape" => 0x1B,
@@ -590,7 +598,8 @@ public sealed class BackgroundInput
             "left" => 0x25,
             "right" => 0x27,
             _ when last.Length == 1 && char.IsLetterOrDigit(last[0]) => char.ToUpperInvariant(last[0]),
-            _ when last.StartsWith('f') && int.TryParse(last[1..], out var f) && f is >= 1 and <= 12 => 0x6F + f,
+            _ when last.StartsWith('f') && int.TryParse(last[1..], out var f) && f is >= 1 and <= 24 => 0x6F + f,
+            _ when last.StartsWith("numpad") && int.TryParse(last[6..], out var np) && np is >= 0 and <= 9 => 0x60 + np,
             _ => 0
         };
         // Punctuation single chars: char.ToUpperInvariant only makes sense for letters — it
@@ -629,7 +638,7 @@ public sealed class BackgroundInput
 
         if (element != null)
         {
-            var viaPattern = await _uia.InvokeAsync(() =>
+            var viaPattern = await Worker(hwnd).InvokeAsync(() =>
             {
                 if (element.GetCurrentPattern(UiaIds.ScrollPattern) is IUIAutomationScrollPattern sp)
                 {
@@ -701,26 +710,30 @@ public sealed class BackgroundInput
             var start = NativeMethods.MakeLParam(pt.X, pt.Y);
             NativeMethods.PostMessageW(target, NativeMethods.WM_MOUSEMOVE, IntPtr.Zero, start);
             NativeMethods.PostMessageW(target, NativeMethods.WM_LBUTTONDOWN, (IntPtr)NativeMethods.MK_LBUTTON, start);
-            const int steps = 12;
-            for (int i = 1; i <= steps; i++)
+            var last = start;
+            try
             {
-                int ix = fromX + (toX - fromX) * i / steps;
-                int iy = fromY + (toY - fromY) * i / steps;
-                var mp = new NativeMethods.POINT { X = ix, Y = iy };
-                NativeMethods.ScreenToClient(target, ref mp);
-                NativeMethods.PostMessageW(target, NativeMethods.WM_MOUSEMOVE, (IntPtr)NativeMethods.MK_LBUTTON, NativeMethods.MakeLParam(mp.X, mp.Y));
-                Thread.Sleep(20);
+                const int steps = 12;
+                for (int i = 1; i <= steps; i++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    int ix = fromX + (toX - fromX) * i / steps;
+                    int iy = fromY + (toY - fromY) * i / steps;
+                    var mp = new NativeMethods.POINT { X = ix, Y = iy };
+                    NativeMethods.ScreenToClient(target, ref mp);
+                    last = NativeMethods.MakeLParam(mp.X, mp.Y);
+                    NativeMethods.PostMessageW(target, NativeMethods.WM_MOUSEMOVE, (IntPtr)NativeMethods.MK_LBUTTON, last);
+                    Thread.Sleep(InputPace.Ms(20));
+                }
+                return new InputResult(true, "postmessage_drag", $"({fromX},{fromY})→({toX},{toY})", true);
             }
-            var end = new NativeMethods.POINT { X = toX, Y = toY };
-            NativeMethods.ScreenToClient(target, ref end);
-            NativeMethods.PostMessageW(target, NativeMethods.WM_LBUTTONUP, IntPtr.Zero, NativeMethods.MakeLParam(end.X, end.Y));
-            return new InputResult(true, "postmessage_drag", $"({fromX},{fromY})→({toX},{toY})");
+            finally { NativeMethods.PostMessageW(target, NativeMethods.WM_LBUTTONUP, IntPtr.Zero, last); }
         }, ct);
 
     // ---------- Set value ----------
 
-    public Task<InputResult> SetValueAsync(IUIAutomationElement element, string value, CancellationToken ct)
-        => _uia.InvokeAsync(() =>
+    public Task<InputResult> SetValueAsync(IUIAutomationElement element, string value, CancellationToken ct, IntPtr hwnd = default)
+        => Worker(hwnd).InvokeAsync(() =>
         {
             if (element.GetCurrentPattern(UiaIds.ValuePattern) is IUIAutomationValuePattern vp
                 && vp.CurrentIsReadOnly == 0)
