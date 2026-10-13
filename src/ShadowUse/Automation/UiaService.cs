@@ -60,33 +60,47 @@ public sealed class AppTarget
 
 internal sealed class SnapshotCache
 {
-    private readonly ConcurrentDictionary<IntPtr, Snapshot> _byWindow = new();
+    private const int HistoryLimit = 64;
+    private readonly object _gate = new();
+    private readonly Dictionary<IntPtr, Queue<Snapshot>> _byWindow = new();
 
-    public void Store(Snapshot snapshot) => _byWindow[snapshot.Hwnd] = snapshot;
+    public void Store(Snapshot snapshot)
+    {
+        lock (_gate)
+        {
+            if (!_byWindow.TryGetValue(snapshot.Hwnd, out var history) || history.Peek().Pid != snapshot.Pid)
+                _byWindow[snapshot.Hwnd] = history = new();
+            history.Enqueue(snapshot);
+            while (history.Count > HistoryLimit) history.Dequeue();
+        }
+    }
 
     public void RemoveInvalidWindows(Func<IntPtr, bool> isWindow)
     {
-        foreach (var hwnd in _byWindow.Keys)
-            if (!isWindow(hwnd))
-                _byWindow.TryRemove(hwnd, out _);
+        lock (_gate)
+            foreach (var hwnd in _byWindow.Keys.Where(hwnd => !isWindow(hwnd)).ToArray())
+                _byWindow.Remove(hwnd);
     }
 
     public Snapshot? GetForTarget(AppTarget target)
-        => _byWindow.TryGetValue(target.Hwnd, out var snapshot)
-            && snapshot.Pid == target.Pid
-            ? snapshot
-            : null;
+    {
+        lock (_gate)
+            return _byWindow.TryGetValue(target.Hwnd, out var history) && history.Last().Pid == target.Pid
+                ? history.Last() : null;
+    }
 
     public Snapshot? GetForElement(AppTarget target, string elementId)
     {
-        var targetSnapshot = GetForTarget(target);
-        if (targetSnapshot != null)
-            return targetSnapshot.Elements.Any(element => element.Id == elementId)
-                ? targetSnapshot
-                : null;
-        return _byWindow.Values.SingleOrDefault(snapshot =>
-            snapshot.Pid == target.Pid
-            && snapshot.Elements.Any(element => element.Id == elementId));
+        lock (_gate)
+        {
+            bool HasElement(Snapshot snapshot) => snapshot.Pid == target.Pid
+                && snapshot.Elements.Any(element => element.Id == elementId);
+            if (_byWindow.TryGetValue(target.Hwnd, out var history))
+                return history.LastOrDefault(HasElement);
+            // Retain the legacy transient-root fallback only when this target has
+            // no snapshot. Never borrow an id from a sibling observed window.
+            return _byWindow.Values.SelectMany(h => h).LastOrDefault(HasElement);
+        }
     }
 }
 
@@ -100,6 +114,7 @@ public sealed class UiaService
     private readonly SnapshotCache _snapshots = new();
     private int _revision;
     private int _elementCounter;
+    private readonly string _elementNamespace = Guid.NewGuid().ToString("N")[..8];
 
     public UiaService(UiaThread uia) => _uia = uia;
 
@@ -112,7 +127,9 @@ public sealed class UiaService
     // ---------- App resolution ----------
 
     public Task<AppTarget[]> ListAppsAsync(CancellationToken ct = default)
-        => _uia.InvokeAsync(() =>
+        // Native window enumeration does not need COM. Keep discovery and game
+        // input usable even when a target's UIA provider stops responding.
+        => Task.Run(() =>
         {
             var list = new List<AppTarget>();
             var processNames = new Dictionary<int, string>();
@@ -286,7 +303,7 @@ public sealed class UiaService
 
                 if ((interactive || informative) && !offscreen && (r.right - r.left) > 0 && (r.bottom - r.top) > 0)
                 {
-                    var id = "e" + Interlocked.Increment(ref _elementCounter);
+                    var id = $"e{_elementNamespace}-{Interlocked.Increment(ref _elementCounter)}";
                     var info = new ElementInfo
                     {
                         Id = id,

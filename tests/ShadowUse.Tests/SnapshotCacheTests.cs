@@ -82,6 +82,31 @@ public sealed class SnapshotCacheTests
         Assert.NotNull(forElement.Invoke(cache, [CreateTarget((IntPtr)2), "e2"]));
     }
 
+    [Fact]
+    public void SnapshotCache_KeepsOlderIdsWhenAnotherAgentObservesSameWindow()
+    {
+        var type = typeof(UiaService).Assembly.GetType("ShadowUse.Automation.SnapshotCache")!;
+        var cache = Activator.CreateInstance(type)!;
+        type.GetMethod("Store")!.Invoke(cache, [CreateSnapshot((IntPtr)1, "agent-a")]);
+        type.GetMethod("Store")!.Invoke(cache, [CreateSnapshot((IntPtr)1, "agent-b")]);
+        var method = type.GetMethod("GetForElement")!;
+        Assert.NotNull(method.Invoke(cache, [CreateTarget((IntPtr)1), "agent-a"]));
+        Assert.NotNull(method.Invoke(cache, [CreateTarget((IntPtr)1), "agent-b"]));
+    }
+
+    [Fact]
+    public void SnapshotCache_BoundsHistoryWithoutInvalidatingTheNewestSnapshot()
+    {
+        var type = typeof(UiaService).Assembly.GetType("ShadowUse.Automation.SnapshotCache")!;
+        var cache = Activator.CreateInstance(type)!;
+        for (int i = 0; i < 65; i++)
+            type.GetMethod("Store")!.Invoke(cache, [CreateSnapshot((IntPtr)1, $"e{i}")]);
+        var method = type.GetMethod("GetForElement")!;
+        Assert.Null(method.Invoke(cache, [CreateTarget((IntPtr)1), "e0"]));
+        Assert.NotNull(method.Invoke(cache, [CreateTarget((IntPtr)1), "e1"]));
+        Assert.NotNull(method.Invoke(cache, [CreateTarget((IntPtr)1), "e64"]));
+    }
+
     private static AppTarget CreateTarget(IntPtr hwnd)
         => new()
         {
