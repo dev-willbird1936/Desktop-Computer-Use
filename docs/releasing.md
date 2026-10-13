@@ -10,7 +10,11 @@ Requirements: Windows x64, an interactive desktop, the .NET 10 SDK, Python 3, an
 PowerShell 7. Packaging does not require a JEV API key, browser installation, model
 download, or driver.
 
-From the release checkout:
+Use `main` for normal development and release preparation. Keep experiments on
+`experimental/jev`; do not merge that branch into `main` unless those changes
+have been reviewed for release.
+
+From the `main` checkout:
 
 ```powershell
 .\release.bat
@@ -41,8 +45,8 @@ compatibility.
 
 ## GitHub checks
 
-The Windows workflow runs for pull requests to `main`, pushes to `main` or
-`release/**`, and manual dispatch. It uploads candidate files and test results;
+The Windows workflow runs for pull requests to `main`, pushes to `main`, and
+manual dispatch. It uploads candidate files and test results;
 it has no release-publication step or repository write permission.
 
 Hosted-runner checks are not proof that every supported application works. Keep
@@ -52,11 +56,11 @@ interactive regression evidence separate from hosted CI results.
 
 1. Review the candidate diff against GitHub `main`, its version, changelog,
    checksums, and package contents.
-2. Confirm the experimental branch stays local. Push only the reviewed release
-   branch and open a pull request against GitHub `main`; do not use
-   `git push --all`. An older local `main` can still contain experiments.
-3. Require a passing GitHub Windows workflow and review before merging.
-4. Verify the final merged commit and rebuild the candidate from that commit.
+2. With push approval, push only the reviewed `main` branch. Keep
+   `experimental/jev` local; do not use `git push --all`. Follow any GitHub branch
+   protection or pull-request requirements.
+3. Require a passing GitHub Windows workflow and review before publication.
+4. Verify the final `main` commit and rebuild the candidate from that commit.
 5. With explicit publication approval, create the matching version tag and
    GitHub release. Attach the ZIP, loose executable, and checksums from that
    exact build. Mark a candidate as a prerelease when appropriate.
