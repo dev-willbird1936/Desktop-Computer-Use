@@ -29,7 +29,9 @@ try {
     & python scripts/release_smoke.py $exe --version $version
     if ($LASTEXITCODE -ne 0) { throw 'Packaged MCP smoke test failed.' }
 
-    Copy-Item LICENSE, NOTICE.md, README.md -Destination $payload
+    Copy-Item LICENSE, NOTICE.md, README.md, dcu-settings.bat -Destination $payload
+    New-Item -ItemType Directory -Path (Join-Path $payload 'scripts') | Out-Null
+    Copy-Item scripts/settings_server.py -Destination (Join-Path $payload 'scripts')
     $archive = Join-Path $output "dcu-$version-win-x64.zip"
     Compress-Archive -Path "$payload/*" -DestinationPath $archive
     # Retain the loose executable for clients upgrading from earlier releases.

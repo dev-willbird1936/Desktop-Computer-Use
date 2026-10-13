@@ -13,7 +13,7 @@ internal static class Program
         var windowCount = args.Length > 3 && int.TryParse(args[3], out parsed) ? Math.Max(1, parsed) : 1;
         if (windowCount == 1)
         {
-            Application.Run(new StressForm(instance, left, top));
+            Application.Run(new StressForm(instance, left, top, interactive: args.Contains("--interactive")));
             return;
         }
 
@@ -35,11 +35,13 @@ internal sealed class StressForm : Form
 {
     private const int WsExNoActivate = 0x08000000;
     private readonly TextBox _status;
+    private readonly bool _interactive;
     private int _count;
     private int _surfaceEventCount;
 
-    public StressForm(int instance, int left, int top, string? title = null)
+    public StressForm(int instance, int left, int top, string? title = null, bool interactive = false)
     {
+        _interactive = interactive;
         Text = title ?? $"DCU Stress Fixture {instance}";
         StartPosition = FormStartPosition.Manual;
         Location = new Point(left, top);
@@ -102,7 +104,7 @@ internal sealed class StressForm : Form
         get
         {
             var parameters = base.CreateParams;
-            parameters.ExStyle |= WsExNoActivate;
+            if (!_interactive) parameters.ExStyle |= WsExNoActivate;
             return parameters;
         }
     }

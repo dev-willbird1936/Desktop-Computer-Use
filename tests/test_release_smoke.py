@@ -15,6 +15,8 @@ SPEC.loader.exec_module(SMOKE)
 CORE = [
     "list_apps", "get_app_state", "click", "type_text", "press_key", "scroll",
     "drag", "set_value", "wait_for", "execute_sequence", "hide_cursor", "health_check",
+    "game_screenshot", "game_click", "game_move", "game_drag", "game_scroll",
+    "game_key", "game_ocr", "game_bars", "game_wait",
 ]
 
 

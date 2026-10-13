@@ -65,6 +65,8 @@ def smoke(executable, version):
             "list_apps", "get_app_state", "click", "type_text", "press_key",
             "scroll", "drag", "set_value", "wait_for", "execute_sequence",
             "hide_cursor", "health_check",
+            "game_screenshot", "game_click", "game_move", "game_drag", "game_scroll",
+            "game_key", "game_ocr", "game_bars", "game_wait",
         }
         if names != expected:
             raise RuntimeError(f"Unexpected tool catalogue: {sorted(names)}")
@@ -77,7 +79,7 @@ def smoke(executable, version):
         health = json.loads(contents[0])
         if health.get("ok") is not True or health.get("interactive_desktop") is not True:
             raise RuntimeError(f"Desktop health check failed: {health}")
-        print(f"MCP smoke passed: dcu {version}, {len(names)} core tools, UIA available")
+        print(f"MCP smoke passed: dcu {version}, {len(names)} desktop/game tools, interactive desktop available")
     finally:
         process.stdin.close()
         try:

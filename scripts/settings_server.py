@@ -2,14 +2,18 @@
 # Licensed under MIT. See LICENSE. Keep this notice when redistributing.
 # -*- coding: utf-8 -*-
 """DCU settings server: serves a tiny settings page, saves settings.json."""
-import json, os, webbrowser
+import json
+import math
+import os
+import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PORT = 8737
 MAX_BODY_BYTES = 8_192
 APPDATA_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "shadow-use")
 APPDATA_SETTINGS = os.path.join(APPDATA_DIR, "settings.json")
-EXE_SETTINGS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "publish", "settings.json")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+EXE_SETTINGS = os.path.join(ROOT, "settings.json") if os.path.isfile(os.path.join(ROOT, "dcu.exe")) else os.path.join(ROOT, "publish", "settings.json")
 
 DEFAULTS = {
     "AllowUiaTextFallback": True,
@@ -18,9 +22,20 @@ DEFAULTS = {
     "ShowVirtualCursor": True,
     "EnableFocusGuard": True,
     "PostActionDelayMs": 150,
+    "UseRealCursor": False,
+    "GameMode": False,
+    "HumanizedInput": False,
+    "FastInput": False,
+    "HumanizedMouseSpeed": 1.0,
+    "HumanizedTypingSpeed": 1.0,
+    "HumanizedTypoRate": 0.0,
 }
 
 TOGGLES = [
+    ("UseRealCursor", "Use the real cursor / foreground", "Off: background UIA/messages and cosmetic cursor. On: activate the target and use the system cursor/keyboard. Agents can override with input_mode per call."),
+    ("GameMode", "Game input profile", "Keep the game cursor/foreground after real input and use shorter settle waits. Game tools remain callable when this is off. This does not turn on real-cursor input."),
+    ("HumanizedInput", "Humanized foreground input", "Curved motion and varied key timing. Does not switch background input to real input. Per-call input_mode=humanized opts in explicitly."),
+    ("FastInput", "Fast input", "Shorten fixed input/settle delays and humanized timing. Agents can override pace per call."),
     ("AllowUiaTextFallback", "UIA text fallback", "Use UIA SetValue-append when EM_REPLACESEL isn't available. More compatible; can briefly foreground some apps."),
     ("EnableFocusGuard", "Focus guard", "Restore YOUR foreground window + caret after any action that grabs them. Keep this on."),
     ("ShowVirtualCursor", "Virtual cursor", "Show the green ghost cursor during actions."),
@@ -50,8 +65,8 @@ PAGE = """<!doctype html>
 <div class="row"><label><b>Settle delay (ms)</b><small>Pause after each action before the follow-up snapshot.</small></label>
 <input class="num" type="number" id="PostActionDelayMs" min="0" max="5000" step="50"></div>
 <button onclick="save()">Save</button><span id="status"></span>
-<div class="warn" id="warn">⚠ settings.json also exists next to dcu.exe — that file takes precedence over this one.</div>
-<div class="note">Saved to %APPDATA%\\shadow-use\\settings.json — dcu picks it up on next start.</div>
+<div class="warn" id="warn">Editing settings.json beside the executable; it takes precedence over profile settings.</div>
+<div class="note">Reconnect/restart DCU after saving persistent settings. Agents can select input mode and pace per call without a restart.</div>
 <script>
 const TOGGLES = %TOGGLES%;
 let current = {};
@@ -99,6 +114,11 @@ def clean_settings(data):
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError("PostActionDelayMs must be an integer")
             clean[key] = max(0, min(5_000, value))
+        elif key in ("HumanizedMouseSpeed", "HumanizedTypingSpeed", "HumanizedTypoRate"):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError(f"{key} must be a finite number")
+            low, high = (0, 0.2) if key == "HumanizedTypoRate" else (0.25, 4)
+            clean[key] = max(low, min(high, value))
         else:
             if not isinstance(value, bool):
                 raise ValueError(f"{key} must be a boolean")
@@ -136,9 +156,12 @@ class Handler(BaseHTTPRequestHandler):
             if length <= 0 or length > MAX_BODY_BYTES:
                 return self._send(413, b'{"ok":false,"error":"invalid body size"}', "application/json")
             data = json.loads(self.rfile.read(length))
-            clean = clean_settings(data)
-            os.makedirs(APPDATA_DIR, exist_ok=True)
-            with open(APPDATA_SETTINGS, "w", encoding="utf-8") as f:
+            # Keep existing experimental/extension settings when editing main's
+            # known toggles; do not accept new unknown keys from the request.
+            clean = {**load_settings(), **clean_settings(data)}
+            path = EXE_SETTINGS if os.path.exists(EXE_SETTINGS) else APPDATA_SETTINGS
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(clean, f, indent=2)
             self._send(200, b'{"ok":true}', "application/json")
         except (ValueError, json.JSONDecodeError) as ex:

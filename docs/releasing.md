@@ -1,14 +1,16 @@
 # Preparing a release
 
-The release candidate is the stable background desktop MCP server. Do not merge
-experimental JEV, browser, game-input, or perception changes into a release merely
-to make the branch current.
+The release candidate includes desktop, normal/humanized foreground input, and
+native game tools. JEV, browser adaptation, learned visual discovery, and
+alternative driver/hardware/memory injection remain experimental. Do not merge
+the experimental branch wholesale merely to make the release current.
 
 ## Local validation and packaging
 
 Requirements: Windows x64, an interactive desktop, the .NET 10 SDK, Python 3, and
-PowerShell 7. Packaging does not require a JEV API key, browser installation, model
-download, or driver.
+PowerShell 7. Packaging does not require a JEV API key, browser installation,
+model download, or driver. Windows OCR language availability is reported by the
+OCR tool; missing language support does not block unrelated actions.
 
 Use `main` for normal development and release preparation. Keep experiments on
 `experimental/jev`; do not merge that branch into `main` unless those changes
@@ -19,6 +21,7 @@ From the `main` checkout:
 ```powershell
 .\release.bat
 .\stress-test.bat
+.\agent-test.bat
 ```
 
 `release.bat` runs the Release .NET suite and Python harness tests, publishes a
@@ -27,7 +30,8 @@ a new directory under `publish/candidate-*` containing:
 
 - `dcu.exe`, for existing executable-based MCP configurations.
 - `dcu-[VERSION]-win-x64.zip`, including the executable, LICENSE, NOTICE.md,
-  and README.md.
+  README.md, dcu-settings.bat, and scripts/settings_server.py. The optional
+  settings page requires Python; the MCP executable remains self-contained.
 - `SHA256SUMS.txt`, covering the loose executable and ZIP.
 
 The script refuses to reuse an output directory and does not copy local
@@ -38,6 +42,15 @@ publish anything.
 `stress-test.bat` uses only windows it creates. It checks independent windows,
 movement, resize, concurrent actions, foreground preservation, and virtual-cursor
 idle cleanup. Do not operate those fixture windows while the test runs.
+
+`agent-test.bat` starts independent MCP processes and owned windows. It checks
+snapshot retention, cross-process sequence coordination, independent background
+progress, game frame history, explicit foreground/humanized input, and all four
+input toggles. A read-only hook verifies zero DCU-injected mouse events during
+background phases while allowing the physical user to move their mouse. Only
+owned fixtures receive input; original foreground is restored unless the user
+switches elsewhere. Avoid operating the system cursor during its short
+foreground phase.
 
 Run `dcu.exe --doctor` from the candidate output on the intended target machine.
 A successful build alone does not establish desktop access or application

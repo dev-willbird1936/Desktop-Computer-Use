@@ -25,5 +25,25 @@ class SettingsServerTests(unittest.TestCase):
             SETTINGS.clean_settings({"EnableFocusGuard": "false"})
 
 
+class InputSettingsTests(unittest.TestCase):
+    def test_cursor_mode_is_independent_of_other_toggles(self):
+        clean = SETTINGS.clean_settings({"GameMode": True, "HumanizedInput": True, "FastInput": True})
+        self.assertFalse(clean["UseRealCursor"])
+        for key in ("GameMode", "HumanizedInput", "FastInput"):
+            self.assertTrue(clean[key])
+
+    def test_all_input_toggles_are_visible(self):
+        keys = {toggle[0] for toggle in SETTINGS.TOGGLES}
+        self.assertTrue({"UseRealCursor", "GameMode", "HumanizedInput", "FastInput"} <= keys)
+
+    def test_humanized_numeric_settings_are_clamped(self):
+        clean = SETTINGS.clean_settings({"HumanizedMouseSpeed": 99, "HumanizedTypingSpeed": -1, "HumanizedTypoRate": 1})
+        self.assertEqual((4, 0.25, 0.2), (clean["HumanizedMouseSpeed"], clean["HumanizedTypingSpeed"], clean["HumanizedTypoRate"]))
+
+    def test_nonfinite_humanized_settings_are_rejected(self):
+        with self.assertRaises(ValueError):
+            SETTINGS.clean_settings({"HumanizedMouseSpeed": float("nan")})
+
+
 if __name__ == "__main__":
     unittest.main()
