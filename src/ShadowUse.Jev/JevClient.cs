@@ -19,8 +19,11 @@ internal sealed class JevClient(HttpClient httpClient, JevOptions options)
 {
     private static readonly JsonSerializerOptions WireJson = new() { WriteIndented = false };
 
-    public async Task<JevRawResponse> PostAsync(object requestBody, CancellationToken ct)
+    public async Task<JevRawResponse> PostAsync(object requestBody, CancellationToken ct, int? maxRetriesOverride = null)
     {
+        int maxRetries = maxRetriesOverride ?? options.MaxRetries;
+        if (maxRetries is < 0 or > 10)
+            throw new ArgumentOutOfRangeException(nameof(maxRetriesOverride), "Jev retry override must be between 0 and 10.");
         var apiKey = Environment.GetEnvironmentVariable(options.ApiKeyEnvironmentVariable);
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new JevUnavailableException($"Jev is enabled but {options.ApiKeyEnvironmentVariable} is not set; no Jev call was made.");
@@ -30,7 +33,7 @@ internal sealed class JevClient(HttpClient httpClient, JevOptions options)
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
         Exception? last = null;
-        for (var attempt = 0; attempt <= options.MaxRetries; attempt++)
+        for (var attempt = 0; attempt <= maxRetries; attempt++)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, options.BaseUrl)
             {
@@ -45,8 +48,9 @@ internal sealed class JevClient(HttpClient httpClient, JevOptions options)
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
             {
+                ct.ThrowIfCancellationRequested();
                 last = ex;
-                if (attempt < options.MaxRetries && !ct.IsCancellationRequested)
+                if (attempt < maxRetries && !ct.IsCancellationRequested)
                 {
                     await Task.Delay(RetryDelay(attempt), ct).ConfigureAwait(false);
                     continue;
@@ -55,7 +59,7 @@ internal sealed class JevClient(HttpClient httpClient, JevOptions options)
             }
 
             var status = (int)response.StatusCode;
-            if (status is 429 or 503 or 529 && attempt < options.MaxRetries)
+            if (status is 429 or 503 or 529 && attempt < maxRetries)
             {
                 response.Dispose();
                 await Task.Delay(RetryDelay(attempt), ct).ConfigureAwait(false);
@@ -63,8 +67,16 @@ internal sealed class JevClient(HttpClient httpClient, JevOptions options)
             }
             if (!response.IsSuccessStatusCode)
             {
+                string? providerDetail = null;
+                try
+                {
+                    providerDetail = await ReadProviderErrorDetailAsync(response.Content, linkedCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
                 response.Dispose();
-                throw new JevUnavailableException($"Jev model provider returned HTTP {status}; no action executed.");
+                ct.ThrowIfCancellationRequested();
+                string detail = providerDetail is null ? "" : $" Provider detail: {providerDetail}.";
+                throw new JevUnavailableException($"Jev model provider returned HTTP {status}; no action executed.{detail}");
             }
 
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -73,6 +85,51 @@ internal sealed class JevClient(HttpClient httpClient, JevOptions options)
         }
 
         throw new JevUnavailableException("Jev model unavailable.", last);
+    }
+
+    private static async Task<string?> ReadProviderErrorDetailAsync(HttpContent content, CancellationToken ct)
+    {
+        const int maxBytes = 4096;
+        var buffer = new byte[maxBytes];
+        int total = 0;
+        try
+        {
+            await using var stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            while (total < buffer.Length)
+            {
+                int read = await stream.ReadAsync(buffer.AsMemory(total), ct).ConfigureAwait(false);
+                if (read == 0) break;
+                total += read;
+            }
+            if (total == 0) return null;
+
+            using var document = JsonDocument.Parse(buffer.AsMemory(0, total));
+            var root = document.RootElement;
+            if (root.TryGetProperty("error", out var error))
+            {
+                if (error.ValueKind == JsonValueKind.String)
+                    return CleanProviderDetail(error.GetString());
+                if (error.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (string key in new[] { "message", "detail", "error_description" })
+                        if (error.TryGetProperty(key, out var errorMessage) && errorMessage.ValueKind == JsonValueKind.String)
+                            return CleanProviderDetail(errorMessage.GetString());
+                }
+            }
+            foreach (string key in new[] { "message", "detail", "error_description" })
+                if (root.TryGetProperty(key, out var message) && message.ValueKind == JsonValueKind.String)
+                    return CleanProviderDetail(message.GetString());
+            return null;
+        }
+        catch (JsonException) { return CleanProviderDetail(Encoding.UTF8.GetString(buffer, 0, total)); }
+        catch (IOException) { return null; }
+    }
+
+    private static string? CleanProviderDetail(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        string clean = new string(value.Where(character => !char.IsControl(character)).Take(300).ToArray()).Trim();
+        return clean.Length == 0 ? null : clean;
     }
 
     private static TimeSpan RetryDelay(int attempt) => TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempt));

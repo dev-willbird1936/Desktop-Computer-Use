@@ -30,8 +30,8 @@ public sealed class JevOptions
 
     /// <summary>When the top two target candidates for the chosen operation are within this
     /// probability margin, issue one follow-up Score call to rank them by match strength
-    /// instead of trusting the near-tied Choice pick. Set to 0 to disable disambiguation.</summary>
-    public double ScoreDisambiguationMargin { get; init; } = 0.1;
+    /// instead of trusting the near-tied Choice pick. Disabled by default because it adds a model round trip.</summary>
+    public double ScoreDisambiguationMargin { get; init; } = 0;
 
     /// <summary>Cap on how many near-tied candidates are sent to the follow-up Score call.</summary>
     public int MaxScoreDisambiguationCandidates { get; init; } = 5;
@@ -43,7 +43,7 @@ public sealed record JevElement(
     string? Role,
     string? Name,
     string? CurrentValue,
-    bool Enabled,
+    bool? Enabled,
     IReadOnlyList<string> Operations,
     IReadOnlyDictionary<string, object?>? Extra = null);
 
@@ -57,7 +57,17 @@ public sealed record JevDecideRequest(
     IReadOnlyList<JevControlOption>? ControlOptions = null,
     IReadOnlyList<string>? RecentActions = null,
     string? Context = null,
-    bool AskGoalReached = true);
+    bool AskGoalReached = true,
+    string? ObservedText = null,
+    IReadOnlyList<JevControlOption>? KeyBindings = null,
+    bool CandidateSetComplete = true,
+    DateTimeOffset? ExpiresAtUtc = null,
+    bool ObservedTextTruncated = false,
+    string? CandidateSetIssue = null,
+    IReadOnlyList<string>? CandidateRoleFilter = null,
+    bool AllowIncompleteCandidateSetForRecommendationOnly = false,
+    bool AllowScoreDisambiguation = true,
+    int? MaxRetriesOverride = null);
 
 public sealed record JevDecision(
     string Operation,
@@ -72,10 +82,15 @@ public sealed record JevDecision(
     string RequestJson,
     string ResponseJson,
     bool DisambiguatedByScore = false,
-    double? TopChoiceMargin = null)
+    double? TopChoiceMargin = null,
+    DateTimeOffset? ExpiresAtUtc = null,
+    double? TargetConfidence = null,
+    IReadOnlyDictionary<string, double>? OperationProbabilities = null)
 {
     /// <summary>True when this decision was computed against an observation the caller no longer holds current.</summary>
     public bool IsStaleAgainst(string currentObservationId) => !string.Equals(ObservationId, currentObservationId, StringComparison.Ordinal);
+
+    public bool IsExpired(DateTimeOffset? now = null) => ExpiresAtUtc is { } expiry && expiry <= (now ?? DateTimeOffset.UtcNow);
 }
 
 public class JevDisabledException(string message) : InvalidOperationException(message);

@@ -234,7 +234,12 @@
         "src/ShadowUse/Capture/ScreenshotService.cs",
         "src/ShadowUse/Automation/UiaService.cs",
         "src/ShadowUse/Tools/ComputerUseTools.cs",
-        "src/ShadowUse/Native/NativeMethods.cs"
+        "src/ShadowUse/Native/NativeMethods.cs",
+        "src/ShadowUse/Tools/GameTools.cs",
+        "src/ShadowUse/Tools/GameJevTools.cs",
+        "src/ShadowUse/Tools/GameJevCandidateMapper.cs",
+        "src/ShadowUse/Vision/ExternalGameVisualCandidateSetParser.cs",
+        "src/ShadowUse/Vision/GameScreenshotFrameCache.cs"
       ],
       "acceptance_test_ids": [
         "F05-T01",
@@ -242,7 +247,9 @@
       ],
       "tests": [
         "tests/ShadowUse.Tests/VisualGroundingServiceTests.cs",
-        "tests/visual_grounding_regression.py"
+        "tests/ShadowUse.Tests/JevVisualRecommendationTests.cs",
+        "tests/visual_grounding_regression.py",
+        "tests/live_bloons_jev_regression.py"
       ],
       "evidence": [
         "Advisor-reviewed architectural decision: native Windows.Media.Ocr (no downloaded model, no new dependency, part of the SDK-style Windows TFM already in use) chosen over shelling out to the cloned OmniParser/UI-TARS Python donors (repo policy bans installing/running their weights, so that code path could never be verified here) or deferring F05 entirely (most of the spec's requirements -- capture binding, coordinate transforms, DPI/geometry/freshness gates, reobserve/unsupported results -- are perception-provider-agnostic and buildable now).",
@@ -250,10 +257,12 @@
         "click_visual_candidate (new MCP tool) re-validates window geometry, DPI, and an 8x8 average-hash of the exact candidate bbox pixels (freshly recaptured) before dispatching through the existing ClickAtAsync postmessage path (same real-child-window and client-coordinate resolution every other click uses); any mismatch returns {error:'reobserve'} instead of a guessed click (F05-R02, F05-T02). Every visual click result is marked actionability:'unverified'.",
         "Live end-to-end proof (tests/visual_grounding_regression.py, jev=off, run 3x clean): a real owned WinForms fixture with a single owner-drawn Panel (GDI+ text only, no UIA-exposed content) resolves 'Save' (unique, confidence 1.0) and two duplicate 'Cancel' regions (confidence 0.5 each) via OCR; click_visual_candidate on 'Save' lands the real click, confirmed two independent ways -- an out-of-band file the fixture writes on click (never read back through OCR/UIA) gains exactly one entry, AND a fresh OCR re-capture shows the on-screen counter advance. After moving/resizing the fixture window, clicking the same (now-stale) candidate id returns 'reobserve' and dispatches nothing: the oracle log and the on-screen counter both stay unchanged (F05-T01 and F05-T02 both green).",
         "VisualGroundingServiceTests.cs (xUnit, reflection into the internal service/hash types per this repo's existing SnapshotCacheTests convention): RecognizeAsync returns Unsupported with a 'no OCR language' reason when the engine is forced null (the missing-parser path of F05-T02, exercised without needing an actual no-language machine); RegionHash.Compute is deterministic and distinguishes a uniform region from one straddling a real edge (average-hash, not a directional difference-hash, after that first design produced a real false-negative caught while writing this test -- see remaining_work).",
-        "Full .NET suite green after this feature (Release, --logger trx): 249 passed prior to this slice per the last full run this session, +16 new (13 VisualGroundingServiceTests-and-ObservationContractTests-touching, plus fixture/tool wiring) -- see docs/native-evolution-validation.md style re-run note for the exact post-F05 total. native_evolution_regression.py --scenario all (login+ambiguity) and the F09 ambiguity/login scenarios remained green after the gate/tool additions, proving no regression to F01/F03/F09/F37/F39."
+        "Full .NET suite green after this feature (Release, --logger trx): 249 passed prior to this slice per the last full run this session, +16 new (13 VisualGroundingServiceTests-and-ObservationContractTests-touching, plus fixture/tool wiring) -- see docs/native-evolution-validation.md style re-run note for the exact post-F05 total. native_evolution_regression.py --scenario all (login+ambiguity) and the F09 ambiguity/login scenarios remained green after the gate/tool additions, proving no regression to F01/F03/F09/F37/F39.",
+        "Separate game/canvas image-to-Jev path: `game_screenshot(include_vlm_candidates=true)` can send the exact frame JPEG through MCP `sampling/createMessage`; it validates the returned candidate JSON, binds it to the cached screenshot, preserves model-asserted completeness as unverified, and `game_jev_decide_candidates` can consume the cached set without caller JSON. Isolated Release regression with a fake sampling-capable client and loopback fake Jev passed: exact frame/JPEG request, two-candidate cache mapping, unverified MCP provenance, image-space/screen-space coordinates, and one decision POST. A second client without sampling capability received `visual_candidate_error` plus the screenshot and triggered no Jev POST. No game input or real Jev/provider call occurred. This proves plumbing, not vision recall or accuracy."
       ],
       "supported_configurations": [
         "native owned WinForms fixture with no UIA-exposed content (text-only OCR grounding)",
+        "game/canvas screenshot candidates from a sampling-capable MCP client (fake-client plumbing tested; model accuracy unmeasured)",
         "Jev off"
       ],
       "blocked_reason": null,
@@ -261,10 +270,10 @@
       "jev_modes_tested": [
         "off"
       ],
-      "last_tested_at": "2026-09-23",
+      "last_tested_at": "2026-10-03",
       "coverage": "partial",
-      "assessment_basis": "Text-only OCR visual grounding is implemented, gated, geometry/DPI/pixel-revalidated, and live-verified end-to-end (click lands + reobserve on staleness) against an intentionally UIA-inadequate owned fixture. This is a genuine partial, not a placeholder.",
-      "remaining_work": "No icon/image-region detection (OmniParser-style) and no VLM-driven semantic grounding (UI-TARS-style) -- this slice is text-only, as scoped with the advisor consult recorded above. The structured-evidence-inadequate gate only inspects the WHOLE window's element list (minus known chrome), not per-region intersection as F05-R02 describes for a mixed UIA+OCR window; a window with SOME real UIA controls plus an OCR-only region elsewhere will not currently trigger OCR for that region. Jev-mode comparison (F05 alongside jev assist/fast_loop) not yet benchmarked. Multi-monitor/DPI-scaled (>96 DPI) revalidation paths are implemented but not live-tested on a scaled display."
+      "assessment_basis": "Native text-only OCR grounding remains live-verified end to end. A separate game/canvas screenshot-to-Jev path now supports candidate generation through MCP client image sampling and validated frame-bound mapping, but only fake-client transport/plumbing was exercised here; no real VLM detection quality is claimed.",
+      "remaining_work": "The native F05 UIA/OCR fallback itself still has no local icon/image-region detector or VLM grounding. Game/canvas sampling works only with an MCP client that advertises sampling and handles images; the Pi MCP client inspected here does not, though it forwards screenshot image results to the outer model. No real-model benchmark exists for recall, false positives, localization, or latency, and no universal completeness claim is justified. The structured-evidence-inadequate gate only inspects the WHOLE window's element list (minus known chrome), not per-region intersection as F05-R02 describes for a mixed UIA+OCR window; a window with SOME real UIA controls plus an OCR-only region elsewhere will not currently trigger OCR for that region. Jev-mode comparison (F05 alongside jev assist/fast_loop) not yet benchmarked. Multi-monitor/DPI-scaled (>96 DPI) revalidation paths are implemented but not live-tested on a scaled display."
     },
     {
       "feature_id": "F06",

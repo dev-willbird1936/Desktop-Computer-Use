@@ -132,7 +132,7 @@ public sealed class PlaywrightBrowserEngine : IBrowserEngine
 
     private sealed class PlaywrightControlledPage(IPage page) : IControlledPage
     {
-        private const int CandidateLimit = 40;
+        private const int CandidateLimit = BrowserSessionManager.MaxObservationCandidates + 1;
         private const int FailedRequestLimit = 50;
         private static readonly string[] Roles = ["button", "a", "input", "textarea", "select"];
         private readonly ConcurrentQueue<BrowserDiagnosticEntry> _failedRequests = HookFailedRequests(page);
@@ -699,18 +699,19 @@ public sealed class PlaywrightBrowserEngine : IBrowserEngine
 
         private static async Task<List<ILocator>> OpenHostsAsync(Func<string, ILocator> scope, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var hosts = scope("css:light=[id]");
-            var count = Math.Min(await hosts.CountAsync().ConfigureAwait(false), CandidateLimit);
-            var open = new List<ILocator>();
-            for (var index = 0; index < count && open.Count < 8; index++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var host = hosts.Nth(index);
-                var mode = await host.EvaluateAsync<string>("element => element.shadowRoot ? element.shadowRoot.mode : ''").ConfigureAwait(false);
-                if (mode == "open")
-                    open.Add(host);
-            }
-            return open;
+            var root = scope("css:light=html");
+            var indexes = await root.EvaluateAsync<int[]>("""
+                (element, maxElements) => {
+                  const nodes = element.ownerDocument.querySelectorAll('[id]');
+                  const open = [];
+                  for (let index = 0; index < nodes.length && index < maxElements && open.length < 8; index++)
+                    if (nodes[index].shadowRoot?.mode === 'open') open.push(index);
+                  return open;
+                }
+                """, CandidateLimit).ConfigureAwait(false);
+            return indexes.Select(index => hosts.Nth(index)).ToList();
         }
 
         private static async Task<List<ILocator>> OpenHostsInsideAsync(ILocator host, CancellationToken cancellationToken)
@@ -743,19 +744,19 @@ public sealed class PlaywrightBrowserEngine : IBrowserEngine
             var found = new List<ObservedElement>();
             await CollectFramesAsync(found, selector => page.Locator(selector), null, 0, cancellationToken).ConfigureAwait(false);
             RememberPopups();
-            for (var popup = 0; popup < _popupPages.Count && found.Count < CandidateLimit; popup++)
+            for (var popup = 0; popup < _popupPages.Count && !CandidateCollectionFull(found); popup++)
             {
                 if (_popupPages[popup].IsClosed)
                     continue;
                 var popupPage = _popupPages[popup];
                 await CollectRolesAsync(found, role => popupPage.Locator("css:light=" + role), "main", $"popup-page:{popup}>>", cancellationToken).ConfigureAwait(false);
                 var hosts = await OpenHostsAsync(item => popupPage.Locator(item), cancellationToken).ConfigureAwait(false);
-                for (var hostIndex = 0; hostIndex < hosts.Count && found.Count < CandidateLimit; hostIndex++)
+                for (var hostIndex = 0; hostIndex < hosts.Count && !CandidateCollectionFull(found); hostIndex++)
                 {
                     var host = hosts[hostIndex];
                     await CollectOpenRootSurfaceAsync(found, host, $"popup-page:{popup}>>open-root:{hostIndex}>>", cancellationToken).ConfigureAwait(false);
                     var nestedHosts = await OpenHostsInsideAsync(host, cancellationToken).ConfigureAwait(false);
-                    for (var nestedIndex = 0; nestedIndex < nestedHosts.Count && found.Count < CandidateLimit; nestedIndex++)
+                    for (var nestedIndex = 0; nestedIndex < nestedHosts.Count && !CandidateCollectionFull(found); nestedIndex++)
                         await CollectOpenRootSurfaceAsync(found, nestedHosts[nestedIndex], $"popup-page:{popup}>>open-root:{hostIndex}>>open-root:{nestedIndex}>>", cancellationToken).ConfigureAwait(false);
                 }
             }
@@ -765,11 +766,11 @@ public sealed class PlaywrightBrowserEngine : IBrowserEngine
         private async Task CollectFramesAsync(List<ObservedElement> found, Func<string, ILocator> scope, string? framePath, int depth, CancellationToken cancellationToken)
         {
             await CollectAsync(found, scope, framePath ?? "main", cancellationToken).ConfigureAwait(false);
-            if (depth >= MaxFrameDepth || found.Count >= CandidateLimit)
+            if (depth >= MaxFrameDepth || CandidateCollectionFull(found))
                 return;
             var frames = scope("css:light=iframe");
             var count = await frames.CountAsync().ConfigureAwait(false);
-            for (var index = 0; index < count && found.Count < CandidateLimit; index++)
+            for (var index = 0; index < count && !CandidateCollectionFull(found); index++)
             {
                 var childFrame = frames.Nth(index).ContentFrame;
                 var childPath = framePath is null ? $"iframe-{index}" : $"{framePath}/iframe-{index}";
@@ -781,18 +782,76 @@ public sealed class PlaywrightBrowserEngine : IBrowserEngine
         {
             await CollectRolesAsync(found, role => scope("css:light=" + role), frameId, null, cancellationToken).ConfigureAwait(false);
             var hosts = await OpenHostsAsync(scope, cancellationToken).ConfigureAwait(false);
-            for (var index = 0; index < hosts.Count && found.Count < CandidateLimit; index++)
+            for (var index = 0; index < hosts.Count && !CandidateCollectionFull(found); index++)
             {
                 var host = hosts[index];
                 await CollectRolesAsync(found, role => host.Locator(role), frameId, $"open-root:{index}>>", cancellationToken).ConfigureAwait(false);
                 var nestedHosts = await OpenHostsInsideAsync(host, cancellationToken).ConfigureAwait(false);
-                for (var child = 0; child < nestedHosts.Count && found.Count < CandidateLimit; child++)
+                for (var child = 0; child < nestedHosts.Count && !CandidateCollectionFull(found); child++)
                 {
                     var nestedHost = nestedHosts[child];
                     await CollectRolesAsync(found, role => nestedHost.Locator(role), frameId, $"open-root:{index}>>open-root:{child}>>", cancellationToken).ConfigureAwait(false);
                 }
             }
         }
+
+        private const string CandidateSnapshotScript = """
+            (elements, limits) => {
+              const result = [];
+              let visibleCount = 0;
+              let hiddenUploadCount = 0;
+              for (let index = 0; index < elements.length; index++) {
+                if (visibleCount >= limits.visible && (limits.role !== 'input' || hiddenUploadCount >= limits.hiddenUploads)) break;
+                const element = elements[index];
+                const role = element.tagName.toLowerCase();
+                const type = element.getAttribute('type');
+                const style = getComputedStyle(element);
+                const visible = style.visibility !== 'hidden' && style.visibility !== 'collapse' && element.getClientRects().length > 0;
+                const rect = element.getBoundingClientRect();
+                const x = rect.left + rect.width / 2;
+                const y = rect.top + rect.height / 2;
+                const hit = x >= 0 && y >= 0 && x < window.innerWidth && y < window.innerHeight ? document.elementFromPoint(x, y) : null;
+                const pointerReady = visible && !!hit && (hit === element || element.contains(hit));
+                if (visible) {
+                  if (visibleCount >= limits.visible) continue;
+                  visibleCount++;
+                } else {
+                  if (role !== 'input' || (type || '').toLowerCase() !== 'file' || hiddenUploadCount >= limits.hiddenUploads) continue;
+                  hiddenUploadCount++;
+                }
+                const password = (type || '').toLowerCase() === 'password';
+                const field = role === 'input' || role === 'textarea' || role === 'select';
+                const id = element.getAttribute('id');
+                const ariaLabel = element.getAttribute('aria-label');
+                const name = element.getAttribute('name');
+                let ariaDisabled = false;
+                for (let parent = element; parent; parent = parent.parentElement)
+                  if ((parent.getAttribute('aria-disabled') || '').toLowerCase() === 'true') { ariaDisabled = true; break; }
+                const selector = id
+                  ? `#${CSS.escape(id)}`
+                  : ariaLabel
+                    ? `${role}[aria-label=${CSS.escape(ariaLabel)}]`
+                    : name
+                      ? `${role}[name=${CSS.escape(name)}]`
+                      : `${role} >> nth=${index}`;
+                result.push({
+                  index,
+                  id,
+                  selector,
+                  role,
+                  type,
+                  ariaLabel,
+                  name,
+                  enabled: !element.matches(':disabled') && !ariaDisabled,
+                  visible,
+                  pointerReady,
+                  password,
+                  text: password ? null : field ? element.value : element.innerText
+                });
+              }
+              return JSON.stringify(result);
+            }
+            """;
 
         private async Task CollectOpenRootSurfaceAsync(List<ObservedElement> found, ILocator host, string selectorPrefix, CancellationToken cancellationToken)
         {
@@ -801,64 +860,91 @@ public sealed class PlaywrightBrowserEngine : IBrowserEngine
             foreach (var id in ids)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (found.Count >= CandidateLimit || string.IsNullOrWhiteSpace(id) || id.IndexOfAny([' ', '.', '#', ':', '[', ']', '>', '+', '~', '\'']) >= 0)
+                if (string.IsNullOrWhiteSpace(id) || id.IndexOfAny([' ', '.', '#', ':', '[', ']', '>', '+', '~', '\'']) >= 0)
                     continue;
                 var item = host.Locator("#" + id);
                 var type = await item.GetAttributeAsync("type").ConfigureAwait(false);
+                var role = await item.EvaluateAsync<string>("node => node.tagName.toLowerCase()").ConfigureAwait(false);
+                var visible = await item.IsVisibleAsync().ConfigureAwait(false);
+                bool uploadInput = role == "input" && string.Equals(type, "file", StringComparison.OrdinalIgnoreCase);
+                if (!visible && !uploadInput)
+                    continue;
+                if (visible ? VisibleCandidateCount(found) >= CandidateLimit : HiddenUploadCount(found) >= CandidateLimit)
+                    continue;
                 var password = string.Equals(type, "password", StringComparison.OrdinalIgnoreCase);
                 var name = await item.GetAttributeAsync("aria-label").ConfigureAwait(false)
                     ?? await item.GetAttributeAsync("name").ConfigureAwait(false);
-                var role = await item.EvaluateAsync<string>("node => node.tagName.toLowerCase()").ConfigureAwait(false);
+                string? text = password
+                    ? null
+                    : role is "input" or "textarea" or "select"
+                        ? await item.InputValueAsync().ConfigureAwait(false)
+                        : await item.InnerTextAsync().ConfigureAwait(false);
                 found.Add(new ObservedElement(
                     selectorPrefix + "#" + id,
                     role,
                     name,
                     await item.IsEnabledAsync().ConfigureAwait(false),
-                    await item.IsVisibleAsync().ConfigureAwait(false),
+                    visible,
                     password,
-                    password ? null : await item.InnerTextAsync().ConfigureAwait(false),
+                    text,
                     "main",
                     BrowserCapabilities.SupportedOperationsFor(role, type)));
             }
         }
+
+        private static int VisibleCandidateCount(List<ObservedElement> found) => found.Count(element => element.Visible);
+        private static int HiddenUploadCount(List<ObservedElement> found) => found.Count(element => !element.Visible && element.SupportedOperations?.Contains("upload", StringComparer.Ordinal) == true);
+        private static bool CandidateCollectionFull(List<ObservedElement> found)
+            => VisibleCandidateCount(found) >= CandidateLimit && HiddenUploadCount(found) >= CandidateLimit;
 
         private async Task CollectRolesAsync(List<ObservedElement> found, Func<string, ILocator> matches, string frameId, string? selectorPrefix, CancellationToken cancellationToken)
         {
             foreach (var role in Roles)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (CandidateCollectionFull(found))
+                    return;
                 var roleMatches = matches(role);
-                var count = await roleMatches.CountAsync().ConfigureAwait(false);
-                for (var index = 0; index < count && found.Count < CandidateLimit; index++)
+                var json = await roleMatches.EvaluateAllAsync<string>(CandidateSnapshotScript, new
                 {
-                    var item = roleMatches.Nth(index);
-                    var type = await item.GetAttributeAsync("type").ConfigureAwait(false);
-                    var password = string.Equals(type, "password", StringComparison.OrdinalIgnoreCase);
-                    var id = await item.GetAttributeAsync("id").ConfigureAwait(false);
-                    var name = await item.GetAttributeAsync("aria-label").ConfigureAwait(false)
-                        ?? await item.GetAttributeAsync("name").ConfigureAwait(false);
-                    // input/textarea/select have no inner text: their content lives in the DOM
-                    // value property, so InnerTextAsync would always report empty here and any
-                    // caller reading a filled field's current text back would silently see "".
-                    string? text = password
-                        ? null
-                        : role is "input" or "textarea" or "select"
-                            ? await item.InputValueAsync().ConfigureAwait(false)
-                            : await item.InnerTextAsync().ConfigureAwait(false);
-                    var selector = string.IsNullOrWhiteSpace(id) ? $"{role} >> nth={index}" : $"#{id}";
+                    role,
+                    visible = Math.Max(0, CandidateLimit - VisibleCandidateCount(found)),
+                    hiddenUploads = Math.Max(0, CandidateLimit - HiddenUploadCount(found)),
+                }).ConfigureAwait(false);
+                using var document = JsonDocument.Parse(json);
+                foreach (var element in document.RootElement.EnumerateArray())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var index = element.GetProperty("index").GetInt32();
+                    var roleName = element.GetProperty("role").GetString() ?? role;
+                    var type = NullableString(element, "type");
+                    var ariaLabel = NullableString(element, "ariaLabel");
+                    var htmlName = NullableString(element, "name");
+                    var name = ariaLabel ?? htmlName;
+                    var password = element.GetProperty("password").GetBoolean();
+                    var text = NullableString(element, "text");
+                    var visible = element.GetProperty("visible").GetBoolean();
+                    var pointerReady = element.GetProperty("pointerReady").GetBoolean();
+                    var selector = NullableString(element, "selector") ?? $"{role} >> nth={index}";
                     found.Add(new ObservedElement(
                         selectorPrefix is null ? selector : selectorPrefix + selector,
-                        role,
+                        roleName,
                         name,
-                        await item.IsEnabledAsync().ConfigureAwait(false),
-                        await item.IsVisibleAsync().ConfigureAwait(false),
+                        element.GetProperty("enabled").GetBoolean(),
+                        visible,
                         password,
                         text,
                         frameId,
-                        BrowserCapabilities.SupportedOperationsFor(role, type)));
+                        BrowserCapabilities.SupportedOperationsFor(roleName, type))
+                    {
+                        PointerReady = pointerReady,
+                    });
                 }
             }
         }
+
+        private static string? NullableString(JsonElement element, string property)
+            => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     }
 }

@@ -68,6 +68,68 @@ public sealed class JevControllerTests
     }
 
     [Fact]
+    public async Task HttpFailureIncludesBoundedProviderErrorMessageOnly()
+    {
+        var envVar = "JEV_TEST_KEY_" + nameof(HttpFailureIncludesBoundedProviderErrorMessageOnly);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler
+        {
+            Respond = _ => Json(HttpStatusCode.BadRequest,
+                "{\"error\":{\"message\":\"Unsupported request format\"},\"debug_secret\":\"not forwarded\"}"),
+        };
+        var controller = new JevController(new HttpClient(handler), new JevOptions
+        {
+            Mode = JevMode.Assist,
+            ApiKeyEnvironmentVariable = envVar,
+        });
+
+        try
+        {
+            var error = await Assert.ThrowsAsync<JevUnavailableException>(() => controller.DecideAsync(BasicRequest()));
+            Assert.Contains("HTTP 400", error.Message);
+            Assert.Contains("Unsupported request format", error.Message);
+            Assert.DoesNotContain("not forwarded", error.Message);
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
+    }
+
+    [Fact]
+    public async Task HttpFailureIncludesSanitizedBoundedPlainTextProviderBody()
+    {
+        var envVar = "JEV_TEST_KEY_" + nameof(HttpFailureIncludesSanitizedBoundedPlainTextProviderBody);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler
+        {
+            Respond = _ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("Bad request: model unavailable\n" + new string('x', 500), Encoding.UTF8, "text/plain"),
+            },
+        };
+        var controller = new JevController(new HttpClient(handler), new JevOptions
+        {
+            Mode = JevMode.Assist,
+            ApiKeyEnvironmentVariable = envVar,
+        });
+
+        try
+        {
+            var error = await Assert.ThrowsAsync<JevUnavailableException>(() => controller.DecideAsync(BasicRequest()));
+            Assert.Contains("Bad request: model unavailable", error.Message);
+            Assert.DoesNotContain("\n", error.Message);
+            Assert.True(error.Message.Length < 450);
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
+    }
+
+    [Fact]
     public async Task FastLoop_HappyPath_MapsWinningTargetBackToRealElement()
     {
         var envVar = "JEV_TEST_KEY_" + nameof(FastLoop_HappyPath_MapsWinningTargetBackToRealElement);
@@ -85,9 +147,90 @@ public sealed class JevControllerTests
             Assert.Equal("click", decision.Operation);
             Assert.Equal("e2", decision.TargetElementId);
             Assert.Equal(0.95, decision.Probabilities["e2"], 3);
+            Assert.Equal(0.95, decision.TargetConfidence!.Value, 3);
+            Assert.Equal(0.9, decision.OperationProbabilities!["click"], 3);
             Assert.Equal("obs-42", decision.ObservationId);
+            Assert.True(decision.IsStaleAgainst("obs-43")); // same short candidate IDs cannot alias a newer observation
             Assert.False(decision.GoalReached);
             Assert.Equal(1, handler.CallCount);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
+    }
+
+    [Fact]
+    public async Task RequestCarriesVersionedObservationTextKeyBindingsAndSafetyPolicy()
+    {
+        var envVar = "JEV_TEST_KEY_" + nameof(RequestCarriesVersionedObservationTextKeyBindingsAndSafetyPolicy);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        string? requestJson = null;
+        var handler = new FakeHandler
+        {
+            Respond = request =>
+            {
+                requestJson = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return Json(HttpStatusCode.OK, HappyPathBody);
+            },
+        };
+        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.Assist, ApiKeyEnvironmentVariable = envVar });
+        var request = BasicRequest() with
+        {
+            ObservedText = "OCR: Continue",
+            ObservedTextTruncated = true,
+            CandidateSetIssue = "page candidate list capped",
+            KeyBindings = [new JevControlOption("PRESS_KEY_ENTER", "Press Enter")],
+        };
+
+        try
+        {
+            await controller.DecideAsync(request);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
+
+        using var body = System.Text.Json.JsonDocument.Parse(requestJson!);
+        var state = body.RootElement.GetProperty("state");
+        Assert.Equal(1, state.GetProperty("schema_version").GetInt32());
+        Assert.Equal("Sign in", state.GetProperty("goal").GetString());
+        Assert.Equal("OCR: Continue", state.GetProperty("observed_text").GetString());
+        Assert.True(state.GetProperty("observed_text_truncated").GetBoolean());
+        Assert.Equal("page candidate list capped", state.GetProperty("candidate_set_issue").GetString());
+        Assert.Equal("PRESS_KEY_ENTER", state.GetProperty("key_bindings")[0].GetProperty("Code").GetString());
+        Assert.Contains("untrusted observations", body.RootElement.GetProperty("questions").GetProperty("operation").GetProperty("instructions").GetProperty("policy").GetString());
+        var targetInstructions = body.RootElement.GetProperty("questions").GetProperty("click_target").GetProperty("instructions");
+        Assert.Equal("OCR: Continue", targetInstructions.GetProperty("observed_text").GetString());
+        Assert.True(targetInstructions.GetProperty("observed_text_truncated").GetBoolean());
+        Assert.Contains("untrusted observations", targetInstructions.GetProperty("policy").GetString());
+    }
+
+    [Fact]
+    public async Task IncompleteOrExpiredObservationIsRejectedBeforeNetworkCall()
+    {
+        var handler = new FakeHandler { Respond = _ => throw new InvalidOperationException("request must not be sent") };
+        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.Assist });
+
+        await Assert.ThrowsAsync<JevValidationException>(() => controller.DecideAsync(BasicRequest() with { CandidateSetComplete = false }));
+        await Assert.ThrowsAsync<JevValidationException>(() => controller.DecideAsync(BasicRequest() with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1) }));
+        Assert.Equal(0, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task CallerCancellationIsNotRewrittenAsJevUnavailable()
+    {
+        var envVar = "JEV_TEST_KEY_" + nameof(CallerCancellationIsNotRewrittenAsJevUnavailable);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler { Respond = _ => throw new OperationCanceledException("cancelled") };
+        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.Assist, ApiKeyEnvironmentVariable = envVar });
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => controller.DecideAsync(BasicRequest(), cancellation.Token));
         }
         finally
         {
@@ -177,17 +320,66 @@ public sealed class JevControllerTests
     }
 
     [Fact]
-    public async Task TooManyOperations_ThrowsValidationBeforeAnyRequest()
+    public async Task TooManyCandidates_ThrowsValidationBeforeAnyRequest()
     {
         var elements = Enumerable.Range(0, 256)
-            .Select(i => new JevElement($"e{i}", "button", $"Button {i}", null, true, [$"op{i}"]))
+            .Select(i => new JevElement($"e{i}", "button", $"Button {i}", null, true, ["click"]))
             .ToArray();
-        var descriptions = elements.ToDictionary(e => e.Operations[0], _ => "desc");
-        var request = new JevDecideRequest("goal", "obs-1", elements, descriptions);
+        var request = new JevDecideRequest("goal", "obs-1", elements, new Dictionary<string, string> { ["click"] = "desc" });
         var handler = new FakeHandler { Respond = _ => throw new InvalidOperationException("should not be called") };
         var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.Assist });
 
         await Assert.ThrowsAsync<JevValidationException>(() => controller.DecideAsync(request));
+        Assert.Equal(0, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task EmptyCandidateSetCanChooseNoActionWithoutInventingATarget()
+    {
+        const string waitBody = """
+            { "answers": { "operation": { "choice": "WAIT", "confidence": 0.9, "probabilities": { "WAIT": 0.9, "DONE": 0.05, "BLOCKED": 0.05 } } } }
+            """;
+        var envVar = "JEV_TEST_KEY_" + nameof(EmptyCandidateSetCanChooseNoActionWithoutInventingATarget);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler { Respond = _ => Json(HttpStatusCode.OK, waitBody) };
+        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.Assist, ApiKeyEnvironmentVariable = envVar });
+        var request = new JevDecideRequest("wait", "obs-empty", [], new Dictionary<string, string>(), ControlOptions);
+
+        try
+        {
+            var decision = await controller.DecideAsync(request);
+            Assert.Equal("WAIT", decision.Operation);
+            Assert.Null(decision.TargetElementId);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
+    }
+
+    [Fact]
+    public async Task NoTargetDecisionPreservesTheFullOperationProbabilityDistribution()
+    {
+        const string blockedBody = """
+            { "answers": { "operation": { "choice": "BLOCKED", "confidence": 0.45, "probabilities": { "click": 0.2, "WAIT": 0.1, "DONE": 0.25, "BLOCKED": 0.45 } } } }
+            """;
+        var envVar = "JEV_TEST_KEY_" + nameof(NoTargetDecisionPreservesTheFullOperationProbabilityDistribution);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler { Respond = _ => Json(HttpStatusCode.OK, blockedBody) };
+        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.Assist, ApiKeyEnvironmentVariable = envVar });
+
+        try
+        {
+            var decision = await controller.DecideAsync(BasicRequest());
+            Assert.Equal("BLOCKED", decision.Operation);
+            Assert.Equal(4, decision.Probabilities.Count);
+            Assert.Equal(0.45, decision.Probabilities["BLOCKED"], 3);
+            Assert.Equal(1.0, decision.Probabilities.Values.Sum(), 3);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
     }
 
     [Fact]
@@ -279,18 +471,50 @@ public sealed class JevControllerTests
             """;
         var envVar = "JEV_TEST_KEY_" + nameof(NearTiedChoice_IssuesOneScoreCall_AndCanFlipTheWinner);
         Environment.SetEnvironmentVariable(envVar, "test-key");
+        string? scoreRequestJson = null;
         var handler = new FakeHandler();
-        handler.Respond = _ => Json(HttpStatusCode.OK, handler.CallCount == 1 ? TiedTargetsBody : scoreBody);
-        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.FastLoop, ApiKeyEnvironmentVariable = envVar });
+        handler.Respond = request =>
+        {
+            if (handler.CallCount == 1) return Json(HttpStatusCode.OK, TiedTargetsBody);
+            scoreRequestJson = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return Json(HttpStatusCode.OK, scoreBody);
+        };
+        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.FastLoop, ApiKeyEnvironmentVariable = envVar, ScoreDisambiguationMargin = 0.1 });
         try
         {
-            var decision = await controller.DecideAsync(BasicRequest());
+            var decision = await controller.DecideAsync(BasicRequest() with { ObservedText = "Board: O O . / . X . / X . ." });
 
             Assert.Equal(2, handler.CallCount);
             Assert.True(decision.DisambiguatedByScore);
             Assert.Equal("e1", decision.TargetElementId);
             Assert.NotNull(decision.TopChoiceMargin);
             Assert.True(decision.TopChoiceMargin < 0.1);
+            using var scoreRequest = System.Text.Json.JsonDocument.Parse(scoreRequestJson!);
+            Assert.Equal("Board: O O . / . X . / X . .", scoreRequest.RootElement.GetProperty("state").GetProperty("observed_text").GetString());
+            Assert.Contains("Board: O O .", scoreRequest.RootElement.GetProperty("questions").GetProperty("score_1").GetProperty("instructions").GetString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
+    }
+
+    [Fact]
+    public async Task FastLoop_DisablesFollowUpScoreCallByDefault()
+    {
+        var envVar = "JEV_TEST_KEY_" + nameof(FastLoop_DisablesFollowUpScoreCallByDefault);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler { Respond = _ => Json(HttpStatusCode.OK, TiedTargetsBody) };
+        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.FastLoop, ApiKeyEnvironmentVariable = envVar });
+        try
+        {
+            var decision = await controller.DecideAsync(BasicRequest());
+
+            Assert.Equal(1, handler.CallCount);
+            Assert.False(decision.DisambiguatedByScore);
+            Assert.Equal("e2", decision.TargetElementId);
+            Assert.Equal(0.52, decision.TargetConfidence!.Value, 3);
+            Assert.Equal(0.9, decision.OperationProbabilities!["click"], 3);
         }
         finally
         {
@@ -307,7 +531,7 @@ public sealed class JevControllerTests
         handler.Respond = req => handler.CallCount == 1
             ? Json(HttpStatusCode.OK, TiedTargetsBody)
             : Json(HttpStatusCode.InternalServerError, "boom");
-        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.FastLoop, ApiKeyEnvironmentVariable = envVar, MaxRetries = 0 });
+        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.FastLoop, ApiKeyEnvironmentVariable = envVar, MaxRetries = 0, ScoreDisambiguationMargin = 0.1 });
         try
         {
             var decision = await controller.DecideAsync(BasicRequest());

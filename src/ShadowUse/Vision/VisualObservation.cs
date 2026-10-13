@@ -30,6 +30,7 @@ public sealed class VisualObservation
     public required string ParserId;        // "windows.media.ocr"
     public required string ParserVersion;   // OS build + recognizer language tag
     public required IReadOnlyList<VisualCandidate> Candidates;
+    public bool UsesGameCapture;              // capture path that also works for foreground GPU-rendered windows
 }
 
 /// <summary>Result of attempting a visual-grounding capture: either a successful observation,

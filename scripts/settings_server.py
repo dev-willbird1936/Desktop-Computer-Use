@@ -18,6 +18,23 @@ DEFAULTS = {
     "ShowVirtualCursor": True,
     "EnableFocusGuard": True,
     "PostActionDelayMs": 150,
+    "ToolExposure": "core",
+    "JevMode": "off",
+    "DecisionBackend": "jev",
+    "OpenAiModel": "gpt-4o-mini",
+    "OpenAiTimeoutMs": 8_000,
+    "GameMode": False,
+    "FastInput": False,
+    "HumanizedInput": False,
+    "HumanizedMouseSpeed": 1.0,
+    "HumanizedTypingSpeed": 1.0,
+    "HumanizedTypoRate": 0.015,
+}
+
+NUMERIC_RANGES = {
+    "HumanizedMouseSpeed": (0.25, 4.0),
+    "HumanizedTypingSpeed": (0.25, 4.0),
+    "HumanizedTypoRate": (0.0, 0.2),
 }
 
 TOGGLES = [
@@ -26,6 +43,9 @@ TOGGLES = [
     ("ShowVirtualCursor", "Virtual cursor", "Show the green ghost cursor during actions."),
     ("EnableBoundsGuard", "Bounds guard (trust gate)", "Refuse coordinate clicks if the window moved since the last snapshot."),
     ("EnableDesktopCheck", "Desktop check (trust gate)", "Refuse to act on lock screen / secure desktop."),
+    ("GameMode", "Game mode", "Turn on when playing a game or driving a window with no UI tree. Adds game_* tools (screenshot, click, move, key hold, OCR, HUD bars, wait), uses real input, and applies the input backend setting. Not for ordinary apps or browsers. Restart DCU after changing."),
+    ("FastInput", "Fast pace", "Turn on when lower latency matters; usually wanted for games with real-time pressure. Shorter waits, key and click holds, settle delays, and tighter humanized paths and typing across DCU. Timing stays randomised, just lower. Game tools can override per call with pace. Restart DCU to apply."),
+    ("HumanizedInput", "Humanized input", "Turn on when input must look human or the target rejects robotic input; usually wanted for games. Runs click, type_text, press_key, scroll and drag like a person (curved cursor paths, typing rhythm, occasional self-corrected typos) when a call sets no background_mode. Uses real input: takes your cursor and foreground."),
 ]
 
 PAGE = """<!doctype html>
@@ -49,11 +69,24 @@ PAGE = """<!doctype html>
 <div id="rows"></div>
 <div class="row"><label><b>Settle delay (ms)</b><small>Pause after each action before the follow-up snapshot.</small></label>
 <input class="num" type="number" id="PostActionDelayMs" min="0" max="5000" step="50"></div>
+<div class="row"><label><b>Tool list</b><small>Core: list the desktop tools plus search_tools / describe_tool / call_tool; every other tool stays callable. All: list every tool (larger context).</small></label>
+<select class="num" id="ToolExposure"><option value="core">Core</option><option value="all">All</option></select></div>
+<div class="row"><label><b>Jev mode</b><small>Off disables decision tools; Assist enables recommendation tools. The selected decision backend is below. Restart DCU after changing.</small></label>
+<select class="num" id="JevMode"><option value="off">Off</option><option value="assist">Assist</option><option value="fast_loop">Fast loop</option></select></div>
+<div class="row"><label><b>Decision backend</b><small>Jev sends structured text state. OpenAI uses the Responses API for native/browser text decisions and can receive the current screenshot for fresh visual game decisions; no image is sent for hash-verified cached anchors or known-state text decisions. Requires OPENAI_API_KEY in the DCU process environment. Restart DCU after changing.</small></label>
+<select class="num" id="DecisionBackend"><option value="jev">Jev (text-only)</option><option value="openai">OpenAI (multimodal)</option></select></div>
+<div class="row"><label><b>Humanized mouse speed</b><small>0.25 to 4; higher is faster.</small></label>
+<input class="num" type="number" id="HumanizedMouseSpeed" min="0.25" max="4" step="0.25"></div>
+<div class="row"><label><b>Humanized typing speed</b><small>0.25 to 4; higher is faster.</small></label>
+<input class="num" type="number" id="HumanizedTypingSpeed" min="0.25" max="4" step="0.25"></div>
+<div class="row"><label><b>Humanized typo rate</b><small>0 to 0.2 chance per letter of a typo that is then corrected. Secret text never gets typos.</small></label>
+<input class="num" type="number" id="HumanizedTypoRate" min="0" max="0.2" step="0.005"></div>
 <button onclick="save()">Save</button><span id="status"></span>
 <div class="warn" id="warn">⚠ settings.json also exists next to dcu.exe — that file takes precedence over this one.</div>
 <div class="note">Saved to %APPDATA%\\shadow-use\\settings.json — dcu picks it up on next start.</div>
 <script>
 const TOGGLES = %TOGGLES%;
+const HUMAN_NUMBERS = ['HumanizedMouseSpeed', 'HumanizedTypingSpeed', 'HumanizedTypoRate'];
 let current = {};
 async function load() {
   const r = await fetch('/settings'); const d = await r.json();
@@ -64,12 +97,20 @@ async function load() {
       <label for="${key}"><b>${label}</b><small>${desc}</small></label></div>`;
   }
   document.getElementById('PostActionDelayMs').value = current.PostActionDelayMs;
+  document.getElementById('ToolExposure').value = current.ToolExposure;
+  document.getElementById('JevMode').value = current.JevMode;
+  document.getElementById('DecisionBackend').value = current.DecisionBackend;
+  for (const k of HUMAN_NUMBERS) document.getElementById(k).value = current[k];
   if (d.exeSettingsExists) document.getElementById('warn').style.display = 'block';
 }
 async function save() {
   for (const [key] of TOGGLES) current[key] = document.getElementById(key).checked;
   const parsedDelay = parseInt(document.getElementById('PostActionDelayMs').value);
   current.PostActionDelayMs = Number.isNaN(parsedDelay) ? 150 : parsedDelay;
+  current.ToolExposure = document.getElementById('ToolExposure').value;
+  current.JevMode = document.getElementById('JevMode').value;
+  current.DecisionBackend = document.getElementById('DecisionBackend').value;
+  for (const k of HUMAN_NUMBERS) { const v = parseFloat(document.getElementById(k).value); if (!Number.isNaN(v)) current[k] = v; }
   const r = await fetch('/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(current)});
   document.getElementById('status').textContent = r.ok ? ' ✓ saved' : ' save failed';
   setTimeout(() => document.getElementById('status').textContent = '', 2500);
@@ -99,6 +140,31 @@ def clean_settings(data):
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError("PostActionDelayMs must be an integer")
             clean[key] = max(0, min(5_000, value))
+        elif key == "ToolExposure":
+            if value not in ("core", "all"):
+                raise ValueError('ToolExposure must be "core" or "all"')
+            clean[key] = value
+        elif key == "JevMode":
+            if value not in ("off", "assist", "fast_loop"):
+                raise ValueError('JevMode must be "off", "assist", or "fast_loop"')
+            clean[key] = value
+        elif key == "DecisionBackend":
+            if value not in ("jev", "openai"):
+                raise ValueError('DecisionBackend must be "jev" or "openai"')
+            clean[key] = value
+        elif key == "OpenAiModel":
+            if not isinstance(value, str) or not value.strip() or len(value) > 100:
+                raise ValueError("OpenAiModel must be a non-empty string of at most 100 characters")
+            clean[key] = value.strip()
+        elif key == "OpenAiTimeoutMs":
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError("OpenAiTimeoutMs must be an integer")
+            clean[key] = max(1_000, min(60_000, value))
+        elif key in NUMERIC_RANGES:
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value != value:
+                raise ValueError(f"{key} must be a number")
+            lo, hi = NUMERIC_RANGES[key]
+            clean[key] = float(max(lo, min(hi, value)))
         else:
             if not isinstance(value, bool):
                 raise ValueError(f"{key} must be a boolean")

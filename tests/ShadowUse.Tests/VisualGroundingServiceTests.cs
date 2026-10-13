@@ -31,7 +31,7 @@ public sealed class VisualGroundingServiceTests
             initField.SetValue(null, true);
 
             var task = (Task<VisualGroundingOutcome>)recognizeMethod!.Invoke(
-                null, [IntPtr.Zero, CancellationToken.None])!;
+                null, [IntPtr.Zero, CancellationToken.None, false])!;
             var outcome = await task;
 
             Assert.Null(outcome.Observation);

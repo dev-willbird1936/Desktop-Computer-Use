@@ -66,14 +66,22 @@ public sealed record BrowserCandidate(
     bool Password,
     string? Text,
     BrowserActionBinding Binding,
-    IReadOnlyList<string> SupportedOperations);
+    IReadOnlyList<string> SupportedOperations)
+{
+    public bool PointerReady { get; init; } = true;
+}
 
 public sealed record BrowserObservation(
     BrowserTargetRef Target,
     string Url,
     bool Complete,
     string? Truncation,
-    IReadOnlyList<BrowserCandidate> Candidates);
+    IReadOnlyList<BrowserCandidate> Candidates)
+{
+    public string ObservationId { get; init; } = $"obs-{Guid.NewGuid():N}";
+    public DateTimeOffset CapturedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public long CaptureDurationMs { get; init; }
+}
 
 /// <summary>F42-R02 coordinate-bridge fallback result. A structural pointer-move probe runs
 /// BEFORE any press: <see cref="MoveVerified"/> false means zero presses were sent, ever --

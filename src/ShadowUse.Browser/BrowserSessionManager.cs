@@ -1,9 +1,12 @@
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 
 namespace ShadowUse.Browser;
 
 public sealed class BrowserSessionManager : IAsyncDisposable
 {
+    public const int MaxObservationCandidates = 128;
+
     private readonly Func<IBrowserEngine> _engineFactory;
     private readonly List<BrowserSession> _sessions = [];
     private readonly string _dcuSessionId = $"dcu-{Guid.NewGuid():N}";
@@ -156,8 +159,16 @@ public sealed class BrowserPageSession
     public async Task<BrowserObservation> ObserveAsync(CancellationToken cancellationToken = default)
     {
         NoteUrl(_page.Url);
+        var started = Stopwatch.GetTimestamp();
         var elements = await _page.ElementsAsync(cancellationToken).ConfigureAwait(false);
-        var candidates = elements.Select(element => new BrowserCandidate(
+        var visibleElements = elements.Where(element => element.Visible).ToArray();
+        var hiddenUploadElements = elements.Where(element => !element.Visible && element.Enabled
+            && element.SupportedOperations?.Contains("upload", StringComparer.Ordinal) == true).ToArray();
+        var truncated = visibleElements.Length > BrowserSessionManager.MaxObservationCandidates
+            || hiddenUploadElements.Length > BrowserSessionManager.MaxObservationCandidates;
+        var observationElements = visibleElements.Take(BrowserSessionManager.MaxObservationCandidates)
+            .Concat(hiddenUploadElements.Take(BrowserSessionManager.MaxObservationCandidates));
+        var candidates = observationElements.Select(element => new BrowserCandidate(
             $"cand-{Guid.NewGuid():N}",
             element.Selector,
             element.Role,
@@ -167,8 +178,14 @@ public sealed class BrowserPageSession
             element.Password,
             element.Password ? null : element.Text,
             new BrowserActionBinding(_target.PageId, element.FrameId, _target.DocumentEpoch, element.Selector),
-            element.SupportedOperations ?? [])).ToArray();
-        LastObservation = new BrowserObservation(_target, _url, candidates.Length < 40, candidates.Length >= 40 ? "candidate_limit" : null, candidates);
+            element.SupportedOperations ?? [])
+        {
+            PointerReady = element.PointerReady,
+        }).ToArray();
+        LastObservation = new BrowserObservation(_target, _url, !truncated, truncated ? "candidate_limit" : null, candidates)
+        {
+            CaptureDurationMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+        };
         return LastObservation;
     }
 

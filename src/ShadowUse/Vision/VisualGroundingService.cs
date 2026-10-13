@@ -27,6 +27,12 @@ internal static class VisualGroundingService
     // content change). Chosen conservatively small relative to the 64-bit hash.
     private const int RegionHashToleranceBits = 6;
 
+    /// <summary>Drops the cached OCR engine so the next call builds a fresh one (recovery after an OCR failure).</summary>
+    internal static void ResetOcrEngine()
+    {
+        lock (EngineLock) { _engine = null; _engineInitialized = false; }
+    }
+
     internal static OcrEngine? GetEngineLazy()
     {
         lock (EngineLock)
@@ -40,16 +46,23 @@ internal static class VisualGroundingService
         }
     }
 
-    public static async Task<VisualGroundingOutcome> RecognizeAsync(IntPtr hwnd, CancellationToken ct)
+    public static async Task<VisualGroundingOutcome> RecognizeAsync(IntPtr hwnd, CancellationToken ct, bool preferGameCapture = false)
     {
         var engine = GetEngineLazy();
         if (engine == null)
             return VisualGroundingOutcome.Unsupported(
                 "No OCR language is installed for this system (OcrEngine.TryCreateFromUserProfileLanguages returned null).");
 
-        var capture = ScreenshotService.CaptureWindowForVision(hwnd);
+        bool usedGameCapture = false;
+        (Bitmap Bitmap, NativeMethods.RECT Rect)? capture = null;
+        if (preferGameCapture && GameVision.Capture(hwnd) is { } gameFrame)
+        {
+            capture = (gameFrame.Bitmap, gameFrame.Rect);
+            usedGameCapture = true;
+        }
+        capture ??= ScreenshotService.CaptureWindowForVision(hwnd);
         if (capture == null)
-            return VisualGroundingOutcome.Unsupported("Window capture failed (PrintWindow returned no usable content).");
+            return VisualGroundingOutcome.Unsupported("Window capture failed (neither the game-frame nor PrintWindow capture returned usable content).");
 
         var (bitmap, windowRect) = capture.Value;
         try
@@ -97,6 +110,7 @@ internal static class VisualGroundingService
                 ParserId = "windows.media.ocr",
                 ParserVersion = $"{Environment.OSVersion.Version} / {engine.RecognizerLanguage.LanguageTag}",
                 Candidates = candidates,
+                UsesGameCapture = usedGameCapture,
             };
             return VisualGroundingOutcome.Success(observation);
         }
@@ -104,6 +118,21 @@ internal static class VisualGroundingService
         {
             bitmap.Dispose();
         }
+    }
+
+    /// <summary>OCR over a caller-supplied bitmap (game mode reads a cropped, upscaled region). Boxes are in bitmap pixels.</summary>
+    public static async Task<(IReadOnlyList<(string Text, Rectangle Box)> Lines, string? Unsupported)> RecognizeBitmapAsync(Bitmap bitmap)
+    {
+        var engine = GetEngineLazy();
+        if (engine == null)
+            return ([], "No OCR language is installed for this system (OcrEngine.TryCreateFromUserProfileLanguages returned null).");
+        using var softwareBitmap = await ToSoftwareBitmapAsync(bitmap).ConfigureAwait(false);
+        var result = await engine.RecognizeAsync(softwareBitmap);
+        var lines = result.Lines
+            .Select(l => (Text: l.Text?.Trim() ?? "", Box: UnionRect(l.Words)))
+            .Where(l => l.Text.Length > 0 && l.Box.Width > 0 && l.Box.Height > 0)
+            .ToList();
+        return (lines, null);
     }
 
     /// <summary>Re-validates a candidate against the live window before it is turned into a
@@ -130,7 +159,10 @@ internal static class VisualGroundingService
             return (false, "Window DPI changed since the visual observation was captured.");
 
         ct.ThrowIfCancellationRequested();
-        var recapture = ScreenshotService.CaptureWindowForVision(hwnd);
+        (Bitmap Bitmap, NativeMethods.RECT Rect)? recapture = null;
+        if (observation.UsesGameCapture && GameVision.Capture(hwnd) is { } gameFrame)
+            recapture = (gameFrame.Bitmap, gameFrame.Rect);
+        recapture ??= ScreenshotService.CaptureWindowForVision(hwnd);
         if (recapture == null)
             return (false, "Recapture failed while re-validating the visual observation.");
 

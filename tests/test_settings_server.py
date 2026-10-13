@@ -24,6 +24,45 @@ class SettingsServerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             SETTINGS.clean_settings({"EnableFocusGuard": "false"})
 
+    def test_clean_settings_validates_tool_exposure(self):
+        self.assertEqual(SETTINGS.clean_settings({})["ToolExposure"], "core")
+        self.assertEqual(SETTINGS.clean_settings({"ToolExposure": "all"})["ToolExposure"], "all")
+        with self.assertRaises(ValueError):
+            SETTINGS.clean_settings({"ToolExposure": "everything"})
+
+    def test_clean_settings_game_and_jev_modes(self):
+        clean = SETTINGS.clean_settings({})
+        self.assertIs(clean["GameMode"], False)
+        self.assertEqual(clean["JevMode"], "off")
+        self.assertIs(SETTINGS.clean_settings({"GameMode": True})["GameMode"], True)
+        self.assertEqual(SETTINGS.clean_settings({"JevMode": "assist"})["JevMode"], "assist")
+        with self.assertRaises(ValueError):
+            SETTINGS.clean_settings({"JevMode": "turbo"})
+        with self.assertRaises(ValueError):
+            SETTINGS.clean_settings({"GameMode": "yes"})
+        self.assertIs(clean["FastInput"], False)
+        self.assertIs(SETTINGS.clean_settings({"FastInput": True})["FastInput"], True)
+
+    def test_clean_settings_decision_backend_defaults_and_validation(self):
+        self.assertEqual(SETTINGS.clean_settings({})["DecisionBackend"], "jev")
+        self.assertEqual(SETTINGS.clean_settings({"DecisionBackend": "openai"})["DecisionBackend"], "openai")
+        with self.assertRaises(ValueError):
+            SETTINGS.clean_settings({"DecisionBackend": "unknown"})
+        self.assertEqual(SETTINGS.clean_settings({"OpenAiTimeoutMs": 500})["OpenAiTimeoutMs"], 1_000)
+        self.assertEqual(SETTINGS.clean_settings({"OpenAiTimeoutMs": 100_000})["OpenAiTimeoutMs"], 60_000)
+        with self.assertRaises(ValueError):
+            SETTINGS.clean_settings({"OpenAiTimeoutMs": True})
+
+    def test_clean_settings_humanized_defaults_and_clamps(self):
+        clean = SETTINGS.clean_settings({})
+        self.assertIs(clean["HumanizedInput"], False)
+        self.assertEqual(clean["HumanizedTypoRate"], 0.015)
+        clamped = SETTINGS.clean_settings({"HumanizedMouseSpeed": 99, "HumanizedTypoRate": -1})
+        self.assertEqual(clamped["HumanizedMouseSpeed"], 4.0)
+        self.assertEqual(clamped["HumanizedTypoRate"], 0.0)
+        with self.assertRaises(ValueError):
+            SETTINGS.clean_settings({"HumanizedTypingSpeed": "fast"})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,7 +21,7 @@ public sealed class BackgroundInput
 
     public enum MouseButton { Left, Right, Middle }
 
-    public sealed record InputResult(bool Success, string Method, string Detail = "");
+    public sealed record InputResult(bool Success, string Method, string Detail = "", bool InputSent = false, long ElapsedMs = 0, long? ElapsedHoldMs = null, int Attempts = 1, string? InterruptionReason = null);
     private sealed record AddressBarInput(string? Text);
 
     /// <summary>Bug-hunt finding (documented in docs/benchmarks.md, class E, below the "major"
@@ -113,11 +113,11 @@ public sealed class BackgroundInput
             for (int i = 0; i < clickCount; i++)
             {
                 NativeMethods.PostMessageW(target, (uint)down, (IntPtr)flag, lParam);
-                Thread.Sleep(35);
+                Thread.Sleep(InputPace.Ms(35));
                 NativeMethods.PostMessageW(target, (uint)up, IntPtr.Zero, lParam);
-                if (i + 1 < clickCount) Thread.Sleep(50);
+                if (i + 1 < clickCount) Thread.Sleep(InputPace.Ms(50));
             }
-            Thread.Sleep(50);
+            Thread.Sleep(InputPace.Ms(50));
             return new InputResult(true, "postmessage", $"({screenX},{screenY}) x{clickCount}");
         }, ct);
     }
@@ -567,7 +567,7 @@ public sealed class BackgroundInput
             && actualUri.Equals(expectedUri);
     }
 
-    private static (int vk, int ch, int[] mods) ParseKey(string key)
+    internal static (int vk, int ch, int[] mods) ParseKey(string key)
     {
         if (string.IsNullOrEmpty(key)) throw new ArgumentException("key must not be empty");
         var mods = new List<int>();
@@ -588,6 +588,12 @@ public sealed class BackgroundInput
         var last = parts[^1].Trim();
         int vk = last switch
         {
+            "shift" or "lshift" or "rshift" => NativeMethods.VK_SHIFT,
+            "ctrl" or "control" or "lctrl" or "rctrl" => NativeMethods.VK_CONTROL,
+            "alt" or "lalt" or "ralt" => NativeMethods.VK_MENU,
+            "win" or "super" => NativeMethods.VK_LWIN,
+            "insert" => 0x2D,
+            "capslock" => 0x14,
             "return" or "enter" => 0x0D,
             "tab" => 0x09,
             "esc" or "escape" => 0x1B,
@@ -603,7 +609,8 @@ public sealed class BackgroundInput
             "left" => 0x25,
             "right" => 0x27,
             _ when last.Length == 1 && char.IsLetterOrDigit(last[0]) => char.ToUpperInvariant(last[0]),
-            _ when last.StartsWith('f') && int.TryParse(last[1..], out var f) && f is >= 1 and <= 12 => 0x6F + f,
+            _ when last.StartsWith('f') && int.TryParse(last[1..], out var f) && f is >= 1 and <= 24 => 0x6F + f,
+            _ when last.StartsWith("numpad") && int.TryParse(last[6..], out var np) && np is >= 0 and <= 9 => 0x60 + np,
             _ => 0
         };
         // Punctuation single chars: char.ToUpperInvariant only makes sense for letters — it

@@ -19,7 +19,11 @@ public sealed record JevInspectorEntry(
     bool Executed,
     long LatencyMs,
     string Model,
-    DateTimeOffset At);
+    DateTimeOffset At,
+    double? TargetConfidence = null,
+    IReadOnlyDictionary<string, double>? OperationProbabilities = null,
+    bool DisambiguatedByScore = false,
+    double? TopChoiceMargin = null);
 
 /// <summary>
 /// Bounded, non-activating, read-only decision history (F49). Never influences a

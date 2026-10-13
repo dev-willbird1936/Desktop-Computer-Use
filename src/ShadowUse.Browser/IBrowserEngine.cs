@@ -68,4 +68,7 @@ public sealed record ObservedElement(
     bool Password,
     string? Text,
     string FrameId = "main",
-    IReadOnlyList<string>? SupportedOperations = null);
+    IReadOnlyList<string>? SupportedOperations = null)
+{
+    public bool PointerReady { get; init; } = true;
+}

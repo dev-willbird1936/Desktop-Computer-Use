@@ -4,17 +4,18 @@ using ShadowUse.Tools;
 namespace ShadowUse.Tests;
 
 /// <summary>F01-R01/F01-T02: background_mode must be an explicit, checked contract -- strict_background
-/// (the only implemented mode) always passes, the two named-but-unimplemented modes always return a
-/// structured UNSUPPORTED_INPUT_MODE error, and nothing outside these three strings is silently accepted.</summary>
+/// always passes, isolated_interactive passes only for tools that support it, unsupported named modes
+/// return a structured UNSUPPORTED_INPUT_MODE error, and nothing outside these three strings is
+/// silently accepted.</summary>
 public sealed class BackgroundModeTests
 {
-    private static object? Invoke(string backgroundMode)
+    private static object? Invoke(string backgroundMode, bool interactiveSupported = false)
     {
         var method = typeof(ComputerUseTools).GetMethod(
             "CheckBackgroundMode",
             BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(method);
-        return method!.Invoke(null, [backgroundMode]);
+        return method!.Invoke(null, [backgroundMode, interactiveSupported]);
     }
 
     [Fact]
@@ -23,12 +24,20 @@ public sealed class BackgroundModeTests
         Assert.Null(Invoke("strict_background"));
     }
 
-    [Theory]
-    [InlineData("best_effort_background")]
-    [InlineData("isolated_interactive")]
-    public void UnimplementedNamedModes_ReturnStructuredUnsupportedInputMode(string mode)
+    [Fact]
+    public void IsolatedInteractive_PassesOnlyWhereSupported()
     {
-        var result = Invoke(mode);
+        Assert.Null(Invoke("isolated_interactive", interactiveSupported: true));
+        Assert.NotNull(Invoke("isolated_interactive", interactiveSupported: false));
+    }
+
+    [Theory]
+    [InlineData("best_effort_background", true)]
+    [InlineData("best_effort_background", false)]
+    [InlineData("isolated_interactive", false)]
+    public void UnsupportedNamedModes_ReturnStructuredUnsupportedInputMode(string mode, bool interactiveSupported)
+    {
+        var result = Invoke(mode, interactiveSupported);
         Assert.NotNull(result);
         var json = System.Text.Json.JsonSerializer.Serialize(result);
         using var doc = System.Text.Json.JsonDocument.Parse(json);

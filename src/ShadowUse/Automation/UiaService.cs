@@ -18,6 +18,8 @@ public sealed class ElementInfo
     public string ControlType = "";
     public string ClassName = "";
     public string Value = "";
+    public string AcceleratorKey = "";
+    public string AccessKey = "";
     public int NativeWindowHandle;
     public int X, Y, Width, Height;         // window-relative frame
     public int ScreenX, ScreenY;            // absolute frame origin
@@ -89,6 +91,9 @@ public sealed class Snapshot
     // THIS snapshot. Mutated in place after SnapshotAsync returns so click_visual_candidate can
     // read it back off the same cached object via GetSnapshot.
     public ShadowUse.Vision.VisualObservation? Visual { get; set; }
+    public bool VisualGroundingRequired { get; set; }
+    public bool VisualGroundingAttempted { get; set; }
+    public string? VisualGroundingUnsupportedReason { get; set; }
 
     // Observation identity is separate from the legacy action-compatible eN labels.
     public string ObservationId { get; set; } = $"obs-{Guid.NewGuid():N}";
@@ -837,6 +842,8 @@ public sealed class UiaService : IDisposable
                 var readOnlyResult = ReadReadOnly(el);
                 if (readOnlyResult.Error)
                     propertyErrors = true;
+                _ = TryRead(() => el.CurrentAcceleratorKey, out string acceleratorKey);
+                _ = TryRead(() => el.CurrentAccessKey, out string accessKey);
                 bool? enabled = null;
                 if (TryRead(() => el.CurrentIsEnabled, out int enabledValue))
                     enabled = enabledValue != 0;
@@ -866,6 +873,8 @@ public sealed class UiaService : IDisposable
                         ControlType = ControlTypeName(controlType),
                         ClassName = className,
                         Value = valueResult.Value,
+                        AcceleratorKey = acceleratorKey ?? "",
+                        AccessKey = accessKey ?? "",
                         NativeWindowHandle = nativeWindowHandle,
                         X = r.left - bounds.Left,
                         Y = r.top - bounds.Top,
