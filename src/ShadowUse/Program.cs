@@ -32,7 +32,7 @@ internal static class Program
         builder.Services
             .AddMcpServer(o =>
             {
-                o.ServerInfo = new() { Name = "dcu", Version = "0.1.1" };
+                o.ServerInfo = new() { Name = "dcu", Version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "unknown" };
                 o.ServerInstructions = """
                     Background computer control for Windows. All actions are focus-free:
                     UIA patterns or posted window messages — the real cursor never moves,

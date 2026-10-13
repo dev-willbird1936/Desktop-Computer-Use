@@ -24,6 +24,13 @@ public sealed class BackgroundInput
     public sealed record InputResult(bool Success, string Method, string Detail = "");
     private sealed record AddressBarInput(string? Text);
 
+    private void PruneDeadAddressBarEntries()
+    {
+        foreach (var hwnd in _addressBarInputs.Keys)
+            if (!NativeMethods.IsWindow(hwnd))
+                _addressBarInputs.TryRemove(hwnd, out _);
+    }
+
     // ---------- Click ----------
 
     /// <summary>Click an element: UIA Invoke/Toggle/Select (left only) → message click at element center.</summary>
@@ -158,6 +165,7 @@ public sealed class BackgroundInput
     /// </summary>
     public async Task<InputResult> TypeTextAsync(IntPtr hwnd, string text, CancellationToken ct, bool allowUiaTextFallback = false)
     {
+        PruneDeadAddressBarEntries();
         // Ctrl+L establishes an explicit omnibox target. Chromium has separate native
         // routing for its frame and page render widget, so a key stream aimed at the
         // render widget cannot type into the omnibox selected by the frame accelerator.
@@ -220,8 +228,9 @@ public sealed class BackgroundInput
             {
                 foreach (char c in text)
                 {
+                    ct.ThrowIfCancellationRequested();
                     short vk = NativeMethods.VkKeyScanW((ushort)c);
-                    if (vk != -1)
+                    if (!ShouldSendCharOnly(vk))
                     {
                         int key = vk & 0xFF;
                         bool shift = (vk & 0x100) != 0;
@@ -263,12 +272,17 @@ public sealed class BackgroundInput
         {
             foreach (char c in text)
             {
+                ct.ThrowIfCancellationRequested();
                 NativeMethods.PostMessageW(hwnd, NativeMethods.WM_CHAR, (IntPtr)c, IntPtr.Zero);
                 Thread.Sleep(8);
             }
         }, ct).ConfigureAwait(false);
         return new InputResult(true, "wm_char", $"{text.Length} chars");
     }
+
+    // Ctrl/Alt-modified mappings (including LF -> Ctrl+Enter on US keyboards)
+    // must not synthesize a shortcut or submit a form while typing text.
+    internal static bool ShouldSendCharOnly(short vk) => vk == -1 || (vk & 0x0600) != 0;
 
     /// <summary>Find a Chromium/Electron render-widget child window (the HWND that
     /// actually receives keyboard input), if this is that kind of app.</summary>
@@ -426,6 +440,7 @@ public sealed class BackgroundInput
     /// <summary>Key press via posted WM_KEYDOWN/WM_KEYUP (+WM_CHAR for text keys). No focus steal.</summary>
     public async Task<InputResult> PressKeyAsync(IntPtr hwnd, string key, CancellationToken ct)
     {
+        PruneDeadAddressBarEntries();
         var (vk, ch, mods) = ParseKey(key);
         bool isSelectAddress = vk == 'L' && mods.Length == 1 && mods[0] == NativeMethods.VK_CONTROL;
         if (isSelectAddress)

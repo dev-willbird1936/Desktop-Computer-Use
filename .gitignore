@@ -24,3 +24,12 @@ publish-*/
 
 # local AI-tooling cache/config (not part of the shipped project)
 .serena/
+.pi/
+.planning/
+
+# private environment and credentials
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12

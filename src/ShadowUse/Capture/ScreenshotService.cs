@@ -114,17 +114,19 @@ internal static class ScreenshotService
             return task.GetAwaiter().GetResult();
 
         _ = task.ContinueWith(
-            completed =>
-            {
-                if (completed.Status == TaskStatus.RanToCompletion)
-                    completed.Result?.Dispose();
-                else
-                    _ = completed.Exception;
-            },
+            DisposeLateCapture,
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
         return null;
+    }
+
+    private static void DisposeLateCapture(Task<Bitmap?> completed)
+    {
+        if (completed.Status == TaskStatus.RanToCompletion)
+            completed.Result?.Dispose();
+        else
+            _ = completed.Exception;
     }
 
     private static Bitmap? TryCopyFromScreen(NativeMethods.RECT rect)

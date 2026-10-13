@@ -63,38 +63,48 @@ public sealed class ScreenshotWorkerTests
 
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        var lateBitmap = new Bitmap(1, 1);
+        using var completed = new ManualResetEventSlim();
         Func<Bitmap?> blockedCapture = () =>
         {
             entered.Set();
             release.Wait();
-            return lateBitmap;
+            completed.Set();
+            return null;
         };
 
         var first = Task.Run(
             () => (Bitmap?)method.Invoke(null, [blockedCapture, 50]));
-        Assert.True(entered.Wait(TimeSpan.FromSeconds(2)));
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(2)));
+            var second = (Bitmap?)method.Invoke(null, [(Func<Bitmap?>)(() => new Bitmap(1, 1)), 50]);
+            Assert.Null(second);
+            Assert.Null(await first);
+        }
+        finally
+        {
+            release.Set();
+            Assert.True(completed.Wait(TimeSpan.FromSeconds(2)));
+        }
+    }
 
-        var second = (Bitmap?)method.Invoke(null, [(Func<Bitmap?>)(() => new Bitmap(1, 1)), 50]);
-        Assert.Null(second);
-        Assert.Null(await first);
+    [Fact]
+    public void DisposeLateCapture_DisposesSuccessfulResult()
+    {
+        var screenshotType = typeof(UiaService).Assembly.GetType("ShadowUse.Capture.ScreenshotService")!;
+        var method = screenshotType.GetMethod("DisposeLateCapture", BindingFlags.Static | BindingFlags.NonPublic)!;
+        using var bitmap = new Bitmap(1, 1);
+        method.Invoke(null, [Task.FromResult<Bitmap?>(bitmap)]);
+        // The cleanup has finished; never race a native GDI+ read against Dispose.
+        Assert.Throws<ArgumentException>(() => bitmap.GetPixel(0, 0));
+    }
 
-        release.Set();
-        Assert.True(
-            SpinWait.SpinUntil(
-                () =>
-                {
-                    try
-                    {
-                        _ = lateBitmap.GetPixel(0, 0);
-                        return false;
-                    }
-                    catch
-                    {
-                        return true;
-                    }
-                },
-                TimeSpan.FromSeconds(2)),
-            "The bitmap returned after timeout was not disposed.");
+    [Fact]
+    public void DisposeLateCapture_AcceptsMissingAndFaultedResults()
+    {
+        var screenshotType = typeof(UiaService).Assembly.GetType("ShadowUse.Capture.ScreenshotService")!;
+        var method = screenshotType.GetMethod("DisposeLateCapture", BindingFlags.Static | BindingFlags.NonPublic)!;
+        method.Invoke(null, [Task.FromResult<Bitmap?>(null)]);
+        method.Invoke(null, [Task.FromException<Bitmap?>(new InvalidOperationException("capture failed"))]);
     }
 }

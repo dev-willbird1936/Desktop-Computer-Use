@@ -12,7 +12,7 @@ if errorlevel 1 (
 
 where py >nul 2>nul
 if not errorlevel 1 (
-  py -3 -m unittest tests.test_bench_native_structs tests.test_settings_server -v
+  py -3 -m unittest discover -s tests -p "test_*.py" -v
   if errorlevel 1 (
     popd
     exit /b 1
@@ -28,7 +28,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-python -m unittest tests.test_bench_native_structs tests.test_settings_server -v
+python -m unittest discover -s tests -p "test_*.py" -v
 set "dcu_test_result=%errorlevel%"
 popd
 exit /b %dcu_test_result%

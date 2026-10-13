@@ -6,7 +6,7 @@
 <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows-0078D6">
 </p>
 
-**Desktop Computer Use**, or **DCU**, is a background Windows computer-use MCP server. It controls desktop applications without moving your real cursor, stealing focus, or making the target application count itself as focused.
+**Desktop Computer Use**, or **DCU**, is a background Windows computer-use MCP server. It uses accessibility patterns and window messages instead of moving your real cursor. It is designed to preserve your foreground window; some applications can still activate themselves, and the UIA text fallback can briefly take focus.
 
 Use the short name **DCU** in agent instructions to distinguish it from built-in foreground computer-use tools:
 
@@ -18,7 +18,7 @@ A cosmetic green virtual cursor shows DCU actions while you continue working nor
 
 | Capability | Result |
 | --- | --- |
-| Focus-free control | Your active application, keyboard focus, and real cursor remain available. |
+| Background control | Designed to preserve your active application and real cursor; focus-related exceptions are listed below. |
 | UIA-first actions | DCU uses accessibility patterns before window-message fallbacks. |
 | Background screenshots | It can capture many visible or occluded windows without activating them. |
 | Observable actions | Action results report detected effects instead of dispatch success alone. |
@@ -26,9 +26,13 @@ A cosmetic green virtual cursor shows DCU actions while you continue working nor
 
 The benchmark suite and current results are documented in [`docs/benchmarks.md`](docs/benchmarks.md).
 
+This release line contains the stable desktop core. Experimental JEV, browser-adapter, game-input, and perception work is not included. See [release notes](CHANGELOG.md) and the [release checklist](docs/releasing.md).
+
 ## Quick Start
 
-Download `dcu.exe` from the [latest release](https://github.com/dev-willbird1936/Desktop-Computer-Use/releases/latest). It is a self-contained Windows executable and does not require a separate .NET installation.
+Download the Windows x64 ZIP from the [latest release](https://github.com/dev-willbird1936/Desktop-Computer-Use/releases/latest), verify it against `SHA256SUMS.txt`, and extract it. Keep LICENSE and NOTICE.md with `dcu.exe`. The executable is self-contained and does not require a separate .NET installation. Earlier releases provide only the loose executable.
+
+DCU requires an interactive Windows desktop. The executable is unsigned, so Windows may show a reputation warning. Only install binaries from a source you trust. Connect it through MCP stdio; this release does not expose an HTTP server.
 
 ### Claude Code
 
@@ -117,13 +121,17 @@ setup.bat
 run.bat --doctor
 test.bat
 stress-test.bat
+release.bat
 ```
 
-Create a self-contained release executable:
+Run `release.bat` to test and package a release candidate with its license and checksums. It requires Python 3 and PowerShell 7 in addition to the .NET SDK and never pushes, tags, or publishes. See [Preparing a release](docs/releasing.md).
+
+For a standalone development publish:
 
 ```powershell
 dotnet publish src/ShadowUse/ShadowUse.csproj -c Release -r win-x64 `
-  --self-contained true -p:PublishSingleFile=true -o publish
+  --self-contained true -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 ```
 
 ## Architecture
@@ -148,6 +156,7 @@ Safety/Guard               optional bounds and desktop guards
 - The UIA text fallback can briefly foreground some applications.
 - Minimized windows do not have a capturable backing surface.
 - A non-elevated DCU process cannot control elevated targets.
+- A timeout cannot abort an already-running UIA COM call. A permanently unresponsive target can block later UIA work until DCU is restarted.
 
 ---
 
