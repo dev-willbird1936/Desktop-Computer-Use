@@ -5,6 +5,53 @@ namespace ShadowUse.Tests;
 
 public sealed class InputModeTests
 {
+    public static IEnumerable<object[]> ToggleCombinations()
+    {
+        for (int mask = 0; mask < 32; mask++)
+            yield return Enumerable.Range(0, 5).Select(bit => (object)((mask & (1 << bit)) != 0)).ToArray();
+    }
+
+    private static ShadowSettings Settings(bool cursor, bool game, bool human, bool fast, bool show)
+        => new() { UseRealCursor = cursor, GameMode = game, HumanizedInput = human, FastInput = fast, ShowVirtualCursor = show };
+
+    [Theory]
+    [MemberData(nameof(ToggleCombinations))]
+    public void EveryToggleCombinationPreservesIndependentDefaults(bool cursor, bool game, bool human, bool fast, bool show)
+    {
+        var settings = Settings(cursor, game, human, fast, show);
+        // Match a saved settings file rather than testing only object initializers.
+        settings = System.Text.Json.JsonSerializer.Deserialize<ShadowSettings>(System.Text.Json.JsonSerializer.Serialize(settings))!;
+        var mode = InputMode.Resolve(settings);
+        Assert.Equal(cursor, mode.RealCursor);
+        Assert.Equal(cursor && human, mode.Humanized);
+        Assert.Equal(game, settings.GameMode);
+        Assert.Equal(show, settings.ShowVirtualCursor);
+        Assert.Equal(mode, InputMode.Resolve(settings, mode.DispatchName));
+        using (InputPace.Scope(settings.FastInput ? "fast" : "normal"))
+        {
+            Assert.Equal(fast, InputPace.Fast);
+            Assert.Equal(fast ? 35 : 100, InputPace.Ms(100));
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ToggleCombinations))]
+    public void PerCallOverridesWorkWithEveryToggleCombination(bool cursor, bool game, bool human, bool fast, bool show)
+    {
+        var settings = Settings(cursor, game, human, fast, show);
+        Assert.Equal(new InputMode(false, false), InputMode.Resolve(settings, "background"));
+        Assert.Equal(new InputMode(true, human), InputMode.Resolve(settings, "foreground"));
+        Assert.Equal(new InputMode(true, false), InputMode.Resolve(settings, "foreground_plain"));
+        Assert.Equal(new InputMode(true, true), InputMode.Resolve(settings, "humanized"));
+        using (InputPace.Scope("fast")) Assert.True(InputPace.Fast);
+        using (InputPace.Scope("normal")) Assert.False(InputPace.Fast);
+        Assert.Equal(cursor, settings.UseRealCursor);
+        Assert.Equal(game, settings.GameMode);
+        Assert.Equal(human, settings.HumanizedInput);
+        Assert.Equal(fast, settings.FastInput);
+        Assert.Equal(show, settings.ShowVirtualCursor);
+    }
+
     [Theory]
     [InlineData(false, false, false)]
     [InlineData(false, true, false)]

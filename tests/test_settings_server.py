@@ -26,6 +26,14 @@ class SettingsServerTests(unittest.TestCase):
 
 
 class InputSettingsTests(unittest.TestCase):
+    def test_every_toggle_combination_survives_settings_validation(self):
+        keys = ("UseRealCursor", "GameMode", "HumanizedInput", "FastInput", "ShowVirtualCursor")
+        for mask in range(32):
+            values = {key: bool(mask & (1 << bit)) for bit, key in enumerate(keys)}
+            with self.subTest(mask=mask):
+                clean = SETTINGS.clean_settings(values)
+                self.assertEqual(values, {key: clean[key] for key in keys})
+
     def test_cursor_mode_is_independent_of_other_toggles(self):
         clean = SETTINGS.clean_settings({"GameMode": True, "HumanizedInput": True, "FastInput": True})
         self.assertFalse(clean["UseRealCursor"])

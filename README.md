@@ -143,6 +143,8 @@ DCU reads `settings.json` next to the executable, then falls back to `%APPDATA%\
 | `HumanizedInput` | `false` | Shape foreground motion and key timing. Never silently turns a background call into foreground input. |
 | `FastInput` | `false` | Shorten fixed waits and pacing. Does not shorten an explicitly requested key-hold duration or observation timeout. |
 
+All five toggles can be combined: no combination is rejected or silently changes the cursor choice. Humanization and game foreground-retention apply when real-cursor input is selected; the virtual marker is for background actions. Fast pacing works with either delivery mode. Automated checks cover all 32 setting combinations and their per-call overrides.
+
 The background “own cursor” is a **cosmetic overlay**, not a second hardware pointer. `ShowVirtualCursor` controls its visibility; `UseRealCursor` controls how input is delivered.
 
 Per-call `input_mode` overrides the cursor default:

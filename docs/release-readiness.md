@@ -28,8 +28,10 @@ Scores are engineering judgments, not certification. Project scale: S2.3.
 ## Local evidence
 
 Evidence recorded on 2026-10-13 on Windows x64 with .NET SDK 10.0.301 and Python
-3.11.4. Release .NET tests passed 95 checks with no failures; Python tests passed
-15 checks. Compiler builds reported zero warnings and errors. Python Ruff LSP
+3.11.4. Release .NET tests passed 159 checks with no failures; Python tests passed
+16 checks. The five-toggle matrix covers all 32 saved-setting combinations,
+mode selection, canonical sequence dispatch and per-call overrides. It is not
+an end-to-end compatibility claim for every application. Compiler builds reported zero warnings and errors. Python Ruff LSP
 reported no diagnostics in the changed settings server and live-regression
 scripts. C# LSP was unavailable; install its configured command or update
 `pi-lsp.json` to enable that diagnostic route.
