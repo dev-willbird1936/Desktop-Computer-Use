@@ -187,4 +187,29 @@ public sealed class FlowEngineTests : IDisposable
         Assert.True(File.Exists(BookPath));
         Assert.True(new JevActionBook(BookPath).Screens.Count >= 6);
     }
+
+    /// <summary>Flips the game to another screen right after the first decision, as if the UI changed while Jev was thinking.</summary>
+    private sealed class FlippingDecider(IJevFlowDecider inner, SimGame game, string flipTo) : IJevFlowDecider
+    {
+        private bool _done;
+        public async Task<FlowDecision> DecideAsync(FlowDecisionRequest request, CancellationToken ct)
+        {
+            var decision = await inner.DecideAsync(request, ct);
+            if (!_done && request.ImageJpeg is null) { _done = true; game.Reset(flipTo); }
+            return decision;
+        }
+    }
+
+    [Fact]
+    public async Task ScreenChangeDuringJevLatencyBlocksTheStaleInput()
+    {
+        await NewRig().Engine().RunAsync("Start a single-player match", ToMatch);
+        var warm = NewRig(new JevActionBook(BookPath));
+        var engine = new JevFlowEngine(warm.Book, warm.Env, new FlippingDecider(warm.Decider, warm.Game, "difficulty"), Fast, null);
+        var result = await engine.RunAsync("Start a single-player match", ToMatch);
+
+        var stale = Assert.Single(result.Steps, s => s.Outcome == "stale_screen");
+        Assert.Equal("play", stale.ActionId);                       // the decided click was held back...
+        Assert.True(result.GoalReached, $"{result.StopReason}");   // ...and the run recovered from the screen it actually found
+    }
 }

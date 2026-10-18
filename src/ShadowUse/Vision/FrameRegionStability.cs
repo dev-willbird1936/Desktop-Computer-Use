@@ -12,10 +12,12 @@ internal readonly record struct FrameRegionDiagnostic(Rectangle Region, string R
 
 internal static class GameFrameStabilityPolicy
 {
-    public static bool AllowsDispatch(CameraMotion motion, bool regionsProvided, bool regionsCompared, bool regionsStable)
+    /// <param name="screenIdentityVerified">The caller matched the live frame to a saved screen fingerprint, so a whole-frame change
+    /// that is not camera/view motion (an animated menu) is acceptable. Missing motion evidence and detected motion still refuse.</param>
+    public static bool AllowsDispatch(CameraMotion motion, bool regionsProvided, bool regionsCompared, bool regionsStable, bool screenIdentityVerified = false)
         => motion.Available && !motion.Moved
             && (!regionsProvided || regionsCompared && regionsStable)
-            && (!motion.Unclassified || regionsProvided && regionsCompared && regionsStable);
+            && (!motion.Unclassified || screenIdentityVerified || regionsProvided && regionsCompared && regionsStable);
 }
 
 /// <summary>Compares caller-bounded image regions after normalizing both frames through the same JPEG pipeline.</summary>

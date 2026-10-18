@@ -102,12 +102,12 @@ public sealed class SimGame
         else Screen = to;
     }
 
-    /// <summary>36x20 luminance grid: a per-screen pattern plus small frame noise (animated backgrounds).</summary>
+    /// <summary>48x27 luminance grid: a per-screen pattern plus small frame noise (animated backgrounds).</summary>
     public static byte[] Fingerprint(string screen, int noiseSeed)
     {
         var rng = new Random(StringComparer.Ordinal.GetHashCode(screen) ^ 0x5bd1e995);
         var noise = new Random(noiseSeed);
-        var fp = new byte[36 * 20];
+        var fp = new byte[48 * 27];
         for (int i = 0; i < fp.Length; i++) fp[i] = (byte)Math.Clamp(rng.Next(256) + noise.Next(-6, 7), 0, 255);
         return fp;
     }

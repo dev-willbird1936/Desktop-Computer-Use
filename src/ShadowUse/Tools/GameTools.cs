@@ -78,7 +78,7 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
 
     internal static CallToolResult? ValidateSourceFrameStability(string sourceFrameId, string? validationFrameId,
         long? sourceFrameAgeMs, CameraMotion? motion, IReadOnlyList<Rectangle>? regions, bool comparisonAttempted,
-        bool regionsStable, IReadOnlyList<FrameRegionDifference> differences)
+        bool regionsStable, IReadOnlyList<FrameRegionDifference> differences, bool screenIdentityVerified = false)
     {
         bool regionsProvided = regions is { Count: > 0 };
         string? error = motion is not { Available: true }
@@ -87,7 +87,7 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
                 ? "The game view moved since source_frame_id; rediscover and decide again before dispatch."
                 : regionsProvided && (!comparisonAttempted || !regionsStable)
                     ? "A caller-approved static-menu target or context region changed, or its pixels could not be compared; reobserve before dispatch."
-                    : !GameFrameStabilityPolicy.AllowsDispatch(motion, regionsProvided, comparisonAttempted, regionsStable)
+                    : !GameFrameStabilityPolicy.AllowsDispatch(motion, regionsProvided, comparisonAttempted, regionsStable, screenIdentityVerified)
                         ? "The frame has an unclassified whole-screen change since source_frame_id; reobserve before dispatch."
                         : null;
         if (error is null) return null;
@@ -382,7 +382,7 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
     private Task<CallToolResult> ActAsync(string tool, string app, string coordSpace, string fingerprint, ActOpts o,
         Func<Ctx, Task<InputResult>> dispatch, CancellationToken ct, string? sourceFrameId = null,
         string? appId = null, string? actionId = null, IReadOnlyList<Rectangle>? sourceFrameStableRegions = null,
-        int sourceFrameJpegQuality = 75, bool retryOnForegroundLoss = true)
+        int sourceFrameJpegQuality = 75, bool retryOnForegroundLoss = true, bool screenIdentityVerified = false)
         => Guard(tool, async () =>
         {
             var started = Stopwatch.GetTimestamp();
@@ -478,7 +478,7 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
                 if (sourceFrameId is not null)
                 {
                     if (ValidateSourceFrameStability(sourceFrameId, beforeFrameId, sourceFrameAgeMs, sourceMotion,
-                        sourceFrameStableRegions, sourceRegionsCompared, sourceRegionsStable, sourceRegionDifferences) is { } stabilityRefusal)
+                        sourceFrameStableRegions, sourceRegionsCompared, sourceRegionsStable, sourceRegionDifferences, screenIdentityVerified) is { } stabilityRefusal)
                         return stabilityRefusal;
                     var validatedMotion = sourceMotion!; // The stability validator refuses missing or unavailable motion evidence.
                     bool regionsProvided = sourceFrameStableRegions is { Count: > 0 };
@@ -1222,10 +1222,37 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
             new ActOpts(verify, thenScreenshot, null, 0, null, null), sourceFrameId, appId, actionId,
             sourceFrameStableRegions, sourceFrameJpegQuality, retryOnForegroundLoss: false, ct);
 
+    /// <summary>
+    /// Flow-loop click: the caller has already matched the current frame to a saved screen fingerprint, so an unclassified whole-frame
+    /// change (animated menu) no longer blocks dispatch. Target identity, geometry, DPI, freshness, foreground, ownership and detected
+    /// camera/view motion checks all still apply, and no post-action verification frame is taken.
+    /// </summary>
+    internal Task<CallToolResult> GameJevFlowClick(string app, int x, int y, string sourceFrameId, int sourceFrameJpegQuality,
+        string? appId, string? actionId, CancellationToken ct)
+        => GameClickCore(app, x, y, "left", 1, 0, "image",
+            new ActOpts(false, false, null, 0, null, null), sourceFrameId, appId, actionId,
+            null, sourceFrameJpegQuality, retryOnForegroundLoss: false, ct, screenIdentityVerified: true);
+
+    /// <summary>Flow-loop single key tap with the same verified-screen stability rule as <see cref="GameJevFlowClick"/>.</summary>
+    internal Task<CallToolResult> GameJevFlowKeyTap(string app, string key, string sourceFrameId, string? appId, string? actionId, CancellationToken ct)
+    {
+        int[] vks;
+        try { vks = InteractiveInput.ParseKeySet(key); }
+        catch (ArgumentException ex) { return Task.FromResult(Fail(ex.Message, UsageKey)); }
+        return ActAsync("game_key", app, "image", $"key:tap:{key}", new ActOpts(false, false, null, 0, null, null), async ctx =>
+        {
+            ctx.Extra["key"] = key;
+            ctx.Extra["action"] = "tap";
+            var result = await InteractiveInput.GameKeyAsync(ctx.Hwnd, vks, "tap", 0, 100, ctx.Human != null, ct).ConfigureAwait(false);
+            ctx.Extra["keys_held"] = InteractiveInput.HeldKeys.Count;
+            return result;
+        }, ct, sourceFrameId, appId, actionId, null, 75, true, screenIdentityVerified: true);
+    }
+
     private Task<CallToolResult> GameClickCore(string app, int x, int y, string button, int clickCount, int holdMs,
         string coordSpace, ActOpts options, string? sourceFrameId, string? appId, string? actionId,
         IReadOnlyList<Rectangle>? sourceFrameStableRegions, int sourceFrameJpegQuality, bool retryOnForegroundLoss,
-        CancellationToken ct)
+        CancellationToken ct, bool screenIdentityVerified = false)
     {
         if (sourceFrameStableRegions is { Count: < 3 or > 12 })
             return Task.FromResult(Fail("Static-menu frame validation needs 3-12 reviewed target/context regions."));
@@ -1257,7 +1284,7 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
             return await (ctx.Human != null
                 ? InteractiveInput.HumanClickAsync(ctx.Hwnd, sx, sy, null, btn, clickCount, ctx.Human, ct)
                 : InteractiveInput.ClickAsync(ctx.Hwnd, sx, sy, btn, clickCount, ct)).ConfigureAwait(false);
-        }, ct, sourceFrameId, appId, actionId, sourceFrameStableRegions, sourceFrameJpegQuality, retryOnForegroundLoss);
+        }, ct, sourceFrameId, appId, actionId, sourceFrameStableRegions, sourceFrameJpegQuality, retryOnForegroundLoss, screenIdentityVerified);
     }
 
     [McpServerTool(Name = "game_move"), Description(

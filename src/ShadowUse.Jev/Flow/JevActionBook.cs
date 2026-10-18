@@ -93,6 +93,31 @@ public sealed class JevActionBook
 
     public const string AutoDescriptionPrefix = "auto: ";
 
+    /// <summary>User/caller-authored description; never auto-rewritten afterwards.</summary>
+    public void SetDescription(string screenId, string description)
+    {
+        lock (_gate)
+            if (_screens.TryGetValue(screenId, out var screen)) screen.Description = description.Length <= 400 ? description : description[..400];
+    }
+
+    public bool RemoveScreen(string screenId)
+    {
+        lock (_gate)
+        {
+            bool removed = _screens.Remove(screenId);
+            foreach (var key in _goalScreens.Where(kv => kv.Value == screenId).Select(kv => kv.Key).ToArray()) _goalScreens.Remove(key);
+            foreach (var screen in _screens.Values)
+                foreach (var action in screen.Actions)
+                    action.Transitions.Remove(screenId);
+            return removed;
+        }
+    }
+
+    public bool RemoveAction(string screenId, string actionId)
+    {
+        lock (_gate) return _screens.TryGetValue(screenId, out var screen) && screen.Actions.RemoveAll(a => a.Id == actionId) > 0;
+    }
+
     public string NewScreenId()
     {
         lock (_gate)
@@ -240,13 +265,30 @@ public sealed class JevActionBook
         }
     }
 
-    /// <summary>Mean absolute difference, 0-1. Different lengths are maximally different.</summary>
+    /// <summary>Fraction of grid cells that must differ by more than this (of 255) to count as a "changed cell".</summary>
+    private const double ChangedCellLevel = 0.12;
+
+    /// <summary>
+    /// Screen-fingerprint distance, 0-1; different lengths are maximally different. Blends mean luminance difference with the share of
+    /// cells that changed noticeably. Mean difference alone is dominated by a shared background, so a popup or a different panel over
+    /// the same backdrop looked "identical" (measured 0.03-0.05 against 0.00-0.02 for harmless noise); the changed-cell term separates
+    /// them (0.18-0.28 vs under 0.01).
+    /// </summary>
     public static double Distance(byte[] a, byte[] b)
     {
         if (a.Length != b.Length || a.Length == 0) return 1;
         long sum = 0;
-        for (int i = 0; i < a.Length; i++) sum += Math.Abs(a[i] - b[i]);
-        return sum / (255.0 * a.Length);
+        int changed = 0;
+        int limit = (int)Math.Round(ChangedCellLevel * 255);
+        for (int i = 0; i < a.Length; i++)
+        {
+            int d = Math.Abs(a[i] - b[i]);
+            sum += d;
+            if (d > limit) changed++;
+        }
+        double mean = sum / (255.0 * a.Length);
+        double changedShare = Math.Min(1.0, 3.0 * changed / a.Length);
+        return 0.5 * mean + 0.5 * changedShare;
     }
 
     /// <summary>Normalizes a free-text goal into a stable key so repeated phrasings of the same goal share learned end screens.</summary>

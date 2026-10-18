@@ -204,6 +204,23 @@ public sealed class FrameRegionStabilityTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void VerifiedScreenIdentityAllowsAnimatedMenusButNeverMovedViewsOrMissingEvidence()
+    {
+        // Used only by the Jev flow loop after its own fingerprint match: an unclassified whole-frame change (animated menu) is acceptable...
+        Assert.Null(GameTools.ValidateSourceFrameStability("source", "validation", 100,
+            new CameraMotion(Moved: false, Unclassified: true, Available: true), null, false, false, [], screenIdentityVerified: true));
+        // ...but the default policy still refuses it, and detected view motion or missing motion evidence is refused either way.
+        Assert.NotNull(GameTools.ValidateSourceFrameStability("source", "validation", 100,
+            new CameraMotion(Moved: false, Unclassified: true, Available: true), null, false, false, []));
+        Assert.NotNull(GameTools.ValidateSourceFrameStability("source", "validation", 100,
+            new CameraMotion(Moved: true, Unclassified: false, Available: true), null, false, false, [], screenIdentityVerified: true));
+        Assert.NotNull(GameTools.ValidateSourceFrameStability("source", "validation", 100,
+            new CameraMotion(Moved: false, Unclassified: false, Available: false), null, false, false, [], screenIdentityVerified: true));
+        Assert.True(GameFrameStabilityPolicy.AllowsDispatch(new CameraMotion(false, true, true), false, false, false, screenIdentityVerified: true));
+        Assert.False(GameFrameStabilityPolicy.AllowsDispatch(new CameraMotion(false, true, true), false, false, false));
+    }
+
+    [Fact]
     public void UnavailableMotionAndPixelsRemainFailClosed()
     {
         Rectangle[] regions = [new(10, 10, 20, 20), new(40, 10, 30, 30), new(90, 10, 30, 30)];

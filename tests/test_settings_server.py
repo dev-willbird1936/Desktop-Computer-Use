@@ -53,6 +53,18 @@ class SettingsServerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             SETTINGS.clean_settings({"OpenAiTimeoutMs": True})
 
+    def test_clean_settings_jev_flow_toggle_and_model(self):
+        clean = SETTINGS.clean_settings({})
+        self.assertIs(clean["EnableExperimentalGameJevFlow"], False)
+        self.assertEqual(clean["JevModel"], "jev-latest")
+        on = SETTINGS.clean_settings({"EnableExperimentalGameJevFlow": True, "JevModel": "jev-1.14.0"})
+        self.assertIs(on["EnableExperimentalGameJevFlow"], True)
+        self.assertEqual(on["JevModel"], "jev-1.14.0")
+        with self.assertRaises(ValueError):
+            SETTINGS.clean_settings({"EnableExperimentalGameJevFlow": "on"})
+        with self.assertRaises(ValueError):
+            SETTINGS.clean_settings({"JevModel": "jev-2"})
+
     def test_clean_settings_humanized_defaults_and_clamps(self):
         clean = SETTINGS.clean_settings({})
         self.assertIs(clean["HumanizedInput"], False)

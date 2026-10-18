@@ -65,6 +65,11 @@ internal static class Program
         JevMode=fast_loop, DecisionBackend=jev, model jev-1.14.0 or jev-preview, a caller-bounded action list, and execute=true to dispatch.
         Preview with execute=false first. Click menus use one image request for Choice/Noul/Box; key-only menus send state/history without an image. max_actions defaults to 1; an opt-in serial run is limited to 4 unique actions and 60 seconds, uses a fresh frame before each decision, and does not verify after each dispatched action. Input sent is not proof of success. Static-menu region stability is one-step only, explicitly opt-in and keeps post-action verification; it never overrides unavailable frame evidence or detected camera motion. Refusals require reobserve, not retries. Score cutoffs are configured in the isolated settings.json: ExperimentalGameJevActChoiceThreshold (default 0.85), ExperimentalGameJevActClickThreshold (default 0.90), and ExperimentalGameJevActAmbiguityMargin (default 0.10). Zero disables only that score cutoff; all structural, model, frame, region, target, and ownership checks remain.
 
+        Experimental responsive Jev loop: game_jev_flow (requires EnableExperimentalGameJevFlow=true in the isolated settings plus GameMode, JevMode=fast_loop,
+        DecisionBackend=jev and a Box-capable model). It keeps a persistent per-app book (game_jev_flow_book) of screens, inputs, learned click boxes and transitions;
+        known screens are decided with text-only Jev requests and no verification screenshot, images go to Jev only for unknown screens or never-localized controls.
+        Use execute=false first to see what the book knows. If it stops (unmapped_screen, uncertain, box_rejected, stuck_loop, dispatch_failed), continue with the normal game_* tools.
+
         Tool list: only the core desktop loop is listed. More capabilities (browser, workflows,
         subgoals, memory, files, HTTP, grids, voice, review, isolation, demonstrations, Jev) are
         found with search_tools, inspected with describe_tool, and run with call_tool.
@@ -139,8 +144,10 @@ internal static class Program
         services.AddSingleton<GameTools>();
         services.AddSingleton<IGameJevActionFrameSource, GameJevActionFrameSource>();
         services.AddSingleton<IGameJevActionDispatcher, GameJevActionDispatcher>();
+        services.AddSingleton<IGameJevFlowDispatcher, GameJevFlowDispatcher>();
         services.AddSingleton<ImageUiCandidateTools>();
         services.AddSingleton<GameJevTools>();
+        services.AddSingleton<GameJevFlowTools>();
         services.AddSingleton<ExperienceStore>();
         services.AddSingleton<JevInspector>();
         services.AddSingleton<WorkflowRunner>();

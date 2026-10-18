@@ -63,6 +63,18 @@ public sealed class ShadowSettings
     /// <summary>Refuse top-two scores closer than this margin (0-1; 0 disables the ambiguity-margin check).</summary>
     public double ExperimentalGameJevActAmbiguityMargin { get; set; } = 0.10;
 
+    /// <summary>Experimental responsive Jev loop (<c>game_jev_flow</c>): learned screen/action book, text-only decisions on known screens, no per-step verification screenshot. Off by default; enable only in an isolated experimental MCP instance.</summary>
+    public bool EnableExperimentalGameJevFlow { get; set; } = false;
+
+    /// <summary>Steps the flow may rely on a predicted (locally unverifiable) screen before it forces an image sync.</summary>
+    public int JevFlowSyncEvery { get; set; } = 4;
+
+    /// <summary>Fingerprint distance (0-1) under which a live frame counts as a saved screen.</summary>
+    public double JevFlowFingerprintTolerance { get; set; } = 0.06;
+
+    /// <summary>How unknown screens are mapped: "off" (caller seeds actions), "edge" (fast local edge proposals) or "combined" (edge + Windows OCR labels).</summary>
+    public string JevFlowDiscovery { get; set; } = "combined";
+
     /// <summary>Optional local detector Python executable; requires torch, torchvision, numpy and Pillow.</summary>
     public string? LocalUiYoloPythonExecutable { get; set; }
 
@@ -195,6 +207,9 @@ public sealed class ShadowSettings
         ExperimentalGameJevActChoiceThreshold = double.IsFinite(ExperimentalGameJevActChoiceThreshold) ? Math.Clamp(ExperimentalGameJevActChoiceThreshold, 0, 1) : 0.85;
         ExperimentalGameJevActClickThreshold = double.IsFinite(ExperimentalGameJevActClickThreshold) ? Math.Clamp(ExperimentalGameJevActClickThreshold, 0, 1) : 0.90;
         ExperimentalGameJevActAmbiguityMargin = double.IsFinite(ExperimentalGameJevActAmbiguityMargin) ? Math.Clamp(ExperimentalGameJevActAmbiguityMargin, 0, 1) : 0.10;
+        JevFlowSyncEvery = Math.Clamp(JevFlowSyncEvery, 1, 20);
+        JevFlowFingerprintTolerance = double.IsFinite(JevFlowFingerprintTolerance) ? Math.Clamp(JevFlowFingerprintTolerance, 0.01, 0.3) : 0.06;
+        if (JevFlowDiscovery is not ("off" or "edge" or "combined")) JevFlowDiscovery = "combined";
         HardwareBaudRate = Math.Clamp(HardwareBaudRate, 9600, 2_000_000);
         MemoryWriteTargetPid = Math.Max(0, MemoryWriteTargetPid);
     }

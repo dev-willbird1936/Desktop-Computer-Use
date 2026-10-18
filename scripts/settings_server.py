@@ -21,6 +21,8 @@ DEFAULTS = {
     "ToolExposure": "core",
     "JevMode": "off",
     "DecisionBackend": "jev",
+    "JevModel": "jev-latest",
+    "EnableExperimentalGameJevFlow": False,
     "OpenAiModel": "gpt-4o-mini",
     "OpenAiTimeoutMs": 8_000,
     "GameMode": False,
@@ -44,6 +46,7 @@ TOGGLES = [
     ("EnableBoundsGuard", "Bounds guard (trust gate)", "Refuse coordinate clicks if the window moved since the last snapshot."),
     ("EnableDesktopCheck", "Desktop check (trust gate)", "Refuse to act on lock screen / secure desktop."),
     ("GameMode", "Game mode", "Turn on when playing a game or driving a window with no UI tree. Adds game_* tools (screenshot, click, move, key hold, OCR, HUD bars, wait), uses real input, and applies the input backend setting. Not for ordinary apps or browsers. Restart DCU after changing."),
+    ("EnableExperimentalGameJevFlow", "Jev fast flow (experimental, game)", "The responsive Jev game loop (game_jev_flow): learned screens and inputs, text-only decisions on known screens, no per-step verification screenshot. Needs Game mode, Jev mode Fast loop, Decision backend Jev and a Jev model that supports Box (jev-1.14.0 or jev-preview), plus TYPESAFE_API_KEY in DCU's environment. Turn off to use only the normal DCU game tools. Restart DCU after changing."),
     ("FastInput", "Fast pace", "Turn on when lower latency matters; usually wanted for games with real-time pressure. Shorter waits, key and click holds, settle delays, and tighter humanized paths and typing across DCU. Timing stays randomised, just lower. Game tools can override per call with pace. Restart DCU to apply."),
     ("HumanizedInput", "Humanized input", "Turn on when input must look human or the target rejects robotic input; usually wanted for games. Runs click, type_text, press_key, scroll and drag like a person (curved cursor paths, typing rhythm, occasional self-corrected typos) when a call sets no background_mode. Uses real input: takes your cursor and foreground."),
 ]
@@ -73,6 +76,8 @@ PAGE = """<!doctype html>
 <select class="num" id="ToolExposure"><option value="core">Core</option><option value="all">All</option></select></div>
 <div class="row"><label><b>Jev mode</b><small>Off disables decision tools; Assist enables recommendation tools. The selected decision backend is below. Restart DCU after changing.</small></label>
 <select class="num" id="JevMode"><option value="off">Off</option><option value="assist">Assist</option><option value="fast_loop">Fast loop</option></select></div>
+<div class="row"><label><b>Jev model</b><small>Fast flow and Box localization need jev-1.14.0 or jev-preview. Restart DCU after changing.</small></label>
+<select class="num" id="JevModel" style="width:140px"><option value="jev-latest">jev-latest</option><option value="jev-1.14.0">jev-1.14.0</option><option value="jev-preview">jev-preview</option></select></div>
 <div class="row"><label><b>Decision backend</b><small>Jev sends structured text state. OpenAI uses the Responses API for native/browser text decisions and can receive the current screenshot for fresh visual game decisions; no image is sent for hash-verified cached anchors or known-state text decisions. Requires OPENAI_API_KEY in the DCU process environment. Restart DCU after changing.</small></label>
 <select class="num" id="DecisionBackend"><option value="jev">Jev (text-only)</option><option value="openai">OpenAI (multimodal)</option></select></div>
 <div class="row"><label><b>Humanized mouse speed</b><small>0.25 to 4; higher is faster.</small></label>
@@ -100,6 +105,7 @@ async function load() {
   document.getElementById('ToolExposure').value = current.ToolExposure;
   document.getElementById('JevMode').value = current.JevMode;
   document.getElementById('DecisionBackend').value = current.DecisionBackend;
+  document.getElementById('JevModel').value = current.JevModel;
   for (const k of HUMAN_NUMBERS) document.getElementById(k).value = current[k];
   if (d.exeSettingsExists) document.getElementById('warn').style.display = 'block';
 }
@@ -110,6 +116,7 @@ async function save() {
   current.ToolExposure = document.getElementById('ToolExposure').value;
   current.JevMode = document.getElementById('JevMode').value;
   current.DecisionBackend = document.getElementById('DecisionBackend').value;
+  current.JevModel = document.getElementById('JevModel').value;
   for (const k of HUMAN_NUMBERS) { const v = parseFloat(document.getElementById(k).value); if (!Number.isNaN(v)) current[k] = v; }
   const r = await fetch('/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(current)});
   document.getElementById('status').textContent = r.ok ? ' ✓ saved' : ' save failed';
@@ -151,6 +158,10 @@ def clean_settings(data):
         elif key == "DecisionBackend":
             if value not in ("jev", "openai"):
                 raise ValueError('DecisionBackend must be "jev" or "openai"')
+            clean[key] = value
+        elif key == "JevModel":
+            if value not in ("jev-latest", "jev-1.14.0", "jev-preview"):
+                raise ValueError('JevModel must be "jev-latest", "jev-1.14.0", or "jev-preview"')
             clean[key] = value
         elif key == "OpenAiModel":
             if not isinstance(value, str) or not value.strip() or len(value) > 100:

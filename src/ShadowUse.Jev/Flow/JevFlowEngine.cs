@@ -17,8 +17,8 @@ public sealed class JevFlowOptions
     public double AmbiguityMargin { get; init; } = 0.10;
     public double GoalThreshold { get; init; } = 0.85;
 
-    /// <summary>Mean luminance difference (0-1) below which a frame counts as a saved screen.</summary>
-    public double FingerprintTolerance { get; init; } = 0.08;
+    /// <summary>Fingerprint distance (see <see cref="JevActionBook.Distance"/>) below which a frame counts as a saved screen.</summary>
+    public double FingerprintTolerance { get; init; } = 0.06;
 
     public int SettleMs { get; init; } = 150;
     public int MaxSettleMs { get; init; } = 1_500;
@@ -103,7 +103,7 @@ public sealed class JevFlowEngine(JevActionBook book, IJevFlowEnvironment env, I
         Pending? pending = null;
         string? previous = null, lastActionId = null, stopReason = "max_steps", error = null;
         bool goalReached = false;
-        int unconfirmed = 0, repeats = 0;
+        int unconfirmed = 0, repeats = 0, staleStreak = 0;
         (string Screen, string Action)? lastDispatch = null;
         FlowFrame? reuse = null;
         int captures = 0, settleCaptures = 0, jevCalls = 0, textCalls = 0, imageCalls = 0, escalations = 0, dispatches = 0,
@@ -226,6 +226,7 @@ public sealed class JevFlowEngine(JevActionBook book, IJevFlowEnvironment env, I
                         steps.Add(outcome.Record);
                         Absorb(outcome);
                         if (outcome.Stop is { } s1) { stopReason = s1; error = outcome.Error; break; }
+                        if (CheckStale(outcome)) { stopReason = "unstable_screen"; break; }
                         if (repeats > _o.MaxRepeatsWithoutEffect) { stopReason = "stuck_loop"; break; }
                         continue;
                     }
@@ -284,6 +285,7 @@ public sealed class JevFlowEngine(JevActionBook book, IJevFlowEnvironment env, I
                 steps.Add(executed.Record);
                 Absorb(executed);
                 if (executed.Stop is { } stop) { stopReason = stop; error = executed.Error; break; }
+                if (CheckStale(executed)) { stopReason = "unstable_screen"; break; }
                 if (repeats > _o.MaxRepeatsWithoutEffect) { stopReason = "stuck_loop"; break; }
             }
         }
@@ -304,6 +306,12 @@ public sealed class JevFlowEngine(JevActionBook book, IJevFlowEnvironment env, I
         // ---- local helpers (closures over run state) ----
         void Absorb(StepOutcome o)
         {
+            if (o.Stale)
+            {
+                captures += o.SettleCaptures; settleCaptures += o.SettleCaptures;
+                reuse = o.SettledFrame;
+                return;
+            }
             if (!o.Dispatched) return;
             dispatches++;
             if (o.LearnedBox) learnedBoxes++;
@@ -317,6 +325,12 @@ public sealed class JevFlowEngine(JevActionBook book, IJevFlowEnvironment env, I
             reuse = o.SettledFrame;
             if (!o.LearnedBox && lastDispatch is { } ld && ld.Screen == o.FromScreen && ld.Action == o.Action.Id) repeats++; else repeats = 1;
             lastDispatch = (o.FromScreen!, o.Action.Id);
+        }
+
+        bool CheckStale(StepOutcome o)
+        {
+            staleStreak = o.Stale ? staleStreak + 1 : 0;
+            return staleStreak > 2;
         }
 
         void ApplyPending(ref Pending? p, string confirmedScreen)
@@ -363,6 +377,7 @@ public sealed class JevFlowEngine(JevActionBook book, IJevFlowEnvironment env, I
         public string? PredictedScreen { get; init; }
         public FlowFrame? SettledFrame { get; init; }
         public int SettleCaptures { get; init; }
+        public bool Stale { get; init; }
     }
 
     private async Task<StepOutcome> ExecuteChoiceAsync(int step, string tier, string screen, FlowFrame frame, FlowDecision decision,
@@ -404,9 +419,31 @@ public sealed class JevFlowEngine(JevActionBook book, IJevFlowEnvironment env, I
             else return Refuse("box_rejected", "box_rejected", "no valid learned box and Jev Box failed its visibility/confidence/size gates");
         }
 
+        // The model call took time. Re-check the live screen with a free local capture before any input, and dispatch against that fresh frame.
+        var dispatchFrame = frame;
+        int recheckCaptures = 0;
+        if (frame.Fingerprint is not null)
+        {
+            var fresh = await env.CaptureAsync(ct).ConfigureAwait(false);
+            recheckCaptures = 1;
+            if (fresh.Fingerprint is { } freshPrint && book.Match(freshPrint, _o.FingerprintTolerance)?.ScreenId != screen)
+                return new StepOutcome
+                {
+                    Record = new FlowStepRecord(step, tier, screen, screenSource, "stale_screen", action.Id, action.Kind, decision.Confidence, decision.LatencyMs, stepClock.ElapsedMilliseconds, "screen changed while Jev decided; no input sent"),
+                    Stale = true, SettledFrame = fresh, SettleCaptures = recheckCaptures,
+                };
+            dispatchFrame = fresh;
+        }
+
         FlowDispatchResult sent = action.Kind == FlowActionKind.Click
-            ? await env.ClickAsync(frame, target!.Value, ct).ConfigureAwait(false)
-            : await env.TapKeyAsync(frame, action.Key!, ct).ConfigureAwait(false);
+            ? await env.ClickAsync(dispatchFrame, target!.Value, ct).ConfigureAwait(false)
+            : await env.TapKeyAsync(dispatchFrame, action.Key!, ct).ConfigureAwait(false);
+        if (!sent.InputSent && sent.Reobserve && !sent.DoNotRetry)
+            return new StepOutcome
+            {
+                Record = new FlowStepRecord(step, tier, screen, screenSource, "stale_frame", action.Id, action.Kind, decision.Confidence, decision.LatencyMs, stepClock.ElapsedMilliseconds, sent.Error),
+                Stale = true, SettleCaptures = recheckCaptures,
+            };
         if (!sent.InputSent)
             return new StepOutcome
             {
@@ -424,7 +461,7 @@ public sealed class JevFlowEngine(JevActionBook book, IJevFlowEnvironment env, I
             Record = new FlowStepRecord(step, tier, screen, screenSource, "dispatched", action.Id, action.Kind, decision.Confidence, decision.LatencyMs, stepClock.ElapsedMilliseconds,
                 predicted is null ? "next screen unknown; will be recognised" : $"predicted next screen {predicted}"),
             Dispatched = true, LearnedBox = learnedBox, FromScreen = screen, Action = action, PredictedScreen = predicted,
-            SettledFrame = settled, SettleCaptures = settleCaptures,
+            SettledFrame = settled ?? (recheckCaptures > 0 ? dispatchFrame : null), SettleCaptures = settleCaptures + recheckCaptures,
         };
     }
 

@@ -3391,6 +3391,10 @@ public sealed class ComputerUseTools
                 experimental_game_jev_act_choice_threshold = _settings.ExperimentalGameJevActChoiceThreshold,
                 experimental_game_jev_act_click_threshold = _settings.ExperimentalGameJevActClickThreshold,
                 experimental_game_jev_act_ambiguity_margin = _settings.ExperimentalGameJevActAmbiguityMargin,
+                experimental_game_jev_flow_enabled = _settings.EnableExperimentalGameJevFlow,
+                jev_flow_sync_every = _settings.JevFlowSyncEvery,
+                jev_flow_fingerprint_tolerance = _settings.JevFlowFingerprintTolerance,
+                jev_flow_discovery = _settings.JevFlowDiscovery,
             },
             tool_exposure = new
             {

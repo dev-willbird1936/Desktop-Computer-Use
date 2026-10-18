@@ -147,4 +147,26 @@ public sealed class FlowBookTests : IDisposable
         book.EnsureScreen("b", "B");
         Assert.Single(book.MenuFor("b"));
     }
+
+    private static byte[] Backdrop() => Enumerable.Range(0, 48 * 27).Select(i => (byte)(40 + (i % 48) * 2)).ToArray();
+
+    [Fact]
+    public void SameBackdropWithDifferentForegroundIsADifferentScreen()
+    {
+        // Regression for a measured failure of plain mean-difference matching: a popup/panel over a shared backdrop changed
+        // the mean by only ~0.05, below any usable tolerance, while harmless noise changed it by up to ~0.02.
+        var screen = Backdrop();
+        var withPanel = screen.ToArray();
+        for (int y = 8; y < 20; y++)
+            for (int x = 14; x < 34; x++) withPanel[y * 48 + x] = (byte)(x % 2 == 0 ? 220 : 60);
+        var noisy = screen.Select((v, i) => (byte)Math.Clamp(v + (i % 5) - 2 + 4, 0, 255)).ToArray();
+
+        Assert.True(JevActionBook.Distance(screen, noisy) < 0.03);
+        Assert.True(JevActionBook.Distance(screen, withPanel) > 0.12);
+
+        var book = new JevActionBook();
+        book.EnsureScreen("base", "base"); book.AddFingerprint("base", screen);
+        Assert.Equal("base", book.Match(noisy, 0.06)!.Value.ScreenId);
+        Assert.Null(book.Match(withPanel, 0.06));
+    }
 }

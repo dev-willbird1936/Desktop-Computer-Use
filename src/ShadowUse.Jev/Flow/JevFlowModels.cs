@@ -68,7 +68,8 @@ public sealed class FlowScreen
 /// <summary>A captured window frame. Capturing is local and cheap; only sending <see cref="Jpeg"/> to Jev is expensive.</summary>
 public sealed record FlowFrame(string FrameId, byte[] Jpeg, int Width, int Height, byte[]? Fingerprint, DateTimeOffset CapturedAtUtc);
 
-public sealed record FlowDispatchResult(bool InputSent, string? Error = null, bool DoNotRetry = false);
+/// <param name="Reobserve">No input was sent because the frame was stale or the window changed; capture again and re-decide.</param>
+public sealed record FlowDispatchResult(bool InputSent, string? Error = null, bool DoNotRetry = false, bool Reobserve = false);
 
 public sealed record FlowScreenSummary(string Id, string Description);
 
