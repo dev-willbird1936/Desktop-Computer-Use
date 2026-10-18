@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Platform-neutral tests for the Jev flow core. The Jev sources are linked (not referenced) because
+       ShadowUse.Jev targets a Windows TFM although these files use no Windows APIs. This lets the flow
+       logic run on any OS; live Windows/BTD2 behaviour is covered separately. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>ShadowUse.Jev.FlowTests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\ShadowUse.Jev\**\*.cs" Exclude="..\..\src\ShadowUse.Jev\obj\**;..\..\src\ShadowUse.Jev\bin\**" LinkBase="Jev" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>
