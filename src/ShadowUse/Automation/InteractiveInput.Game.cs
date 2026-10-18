@@ -61,6 +61,15 @@ public static partial class InteractiveInput
         _ => ScanKey(vk, up, layout),
     };
 
+    private static string? ReleaseInputWithRecovery(int vk, IntPtr hwnd, IntPtr layout)
+    {
+        if (Send(KeyOrButton(vk, up: true, layout))) return null;
+        if (Send(KeyOrButton(vk, up: true, layout)))
+            return $"Input release for 0x{vk:X2} failed once; a recovery release succeeded. Do not retry this action without reobserving.";
+        TrackHeld(vk, hwnd, layout);
+        return $"Input release for 0x{vk:X2} failed twice; automatic release was armed and the input may remain held. Do not retry.";
+    }
+
     /// <summary>action: tap (press and release), hold (press, wait durationMs, release), down (press and keep), up (release),
     /// repeat (tap every intervalMs for durationMs).</summary>
     public static async Task<InputResult> GameKeyAsync(IntPtr hwnd, int[] vks, string action, int durationMs, int intervalMs, bool humanize, CancellationToken ct)
@@ -110,14 +119,14 @@ public static partial class InteractiveInput
                     for (int n = 0; clock.ElapsedMilliseconds < durationMs; n++)
                     {
                         if (!r.HasForeground()) return ForegroundLost;
-                        if (TapSet(r, vks, layout, hold: InputPace.Ms(35), humanize) is { } tapError) return tapError;
+                        if (TapSet(r, hwnd, vks, layout, hold: InputPace.Ms(35), humanize) is { } tapError) return tapError;
                         int gap = Math.Max(0, intervalMs - 35);
                         r.Wait(humanize ? (int)(gap * (0.85 + 0.3 * r.Rng.NextDouble())) : gap);
                     }
                     return null;
                 }
                 if (action == "tap")
-                    return TapSet(r, vks, layout, humanize ? HumanPlanner.KeyHoldMs(r.Rng, InputPace.Fast) : 40, humanize);
+                    return TapSet(r, hwnd, vks, layout, humanize ? HumanPlanner.KeyHoldMs(r.Rng, InputPace.Fast) : 40, humanize);
 
                 foreach (var vk in vks)
                 {
@@ -138,23 +147,49 @@ public static partial class InteractiveInput
         return result with { ElapsedHoldMs = elapsedHoldMs };
     }
 
-    private static string? TapSet(Run r, int[] vks, IntPtr layout, int hold, bool humanize)
+    private static string? TapSet(Run r, IntPtr hwnd, int[] vks, IntPtr layout, int hold, bool humanize)
     {
         var pressed = new List<int>();
+        string? actionError = null, releaseError = null;
+        OperationCanceledException? cancellation = null;
         try
         {
             foreach (var vk in vks)
             {
-                if (!Send(KeyOrButton(vk, false, layout))) return "SendInput rejected the key press";
+                if (!r.HasForeground())
+                {
+                    actionError = ForegroundLost;
+                    break;
+                }
+                if (!Send(KeyOrButton(vk, false, layout)))
+                {
+                    actionError = "SendInput rejected the key press";
+                    break;
+                }
                 pressed.Add(vk);
-                if (humanize) r.Wait(r.P(4, 30));
+                if (humanize && !r.WaitWhileForeground(r.P(4, 30)))
+                {
+                    actionError = ForegroundLost;
+                    break;
+                }
             }
-            return r.WaitWhileForeground(hold) ? null : ForegroundLost;
+            if (actionError is null) actionError = r.WaitWhileForeground(hold) ? null : ForegroundLost;
         }
+        catch (OperationCanceledException ex) { cancellation = ex; }
         finally
         {
-            for (int i = pressed.Count - 1; i >= 0; i--) Send(KeyOrButton(pressed[i], true, layout));
+            for (int i = pressed.Count - 1; i >= 0; i--)
+            {
+                var error = ReleaseInputWithRecovery(pressed[i], hwnd, layout);
+                if (releaseError is null && error is not null) releaseError = error;
+            }
         }
+
+        if (releaseError is not null)
+            return cancellation is null ? releaseError : $"Input was cancelled; {releaseError}";
+        if (cancellation is not null)
+            throw new OperationCanceledException(cancellation.Message, cancellation, r.CancellationToken);
+        return actionError;
     }
 
     // A key left down by "down" is released automatically after MaxHoldMs so a crashed or forgetful caller cannot leave a game running.

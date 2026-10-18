@@ -27,12 +27,25 @@ public sealed class JevController
 
     public JevMode Mode => _options.Mode;
     public double MinExecuteConfidence => _options.MinExecuteConfidence;
+    public string Model => _options.Model;
+    public bool SupportsBox => string.Equals(_options.Model, "jev-1.14.0", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(_options.Model, "jev-preview", StringComparison.OrdinalIgnoreCase);
 
-    public async Task<JevDecision> DecideAsync(JevDecideRequest request, CancellationToken ct = default)
+    public Task<JevDecision> DecideAsync(JevDecideRequest request, CancellationToken ct = default)
+        => DecideCoreAsync(request, null, ct);
+
+    public Task<JevDecision> DecideWithImageAsync(JevDecideRequest request, ReadOnlyMemory<byte> imageJpeg, CancellationToken ct = default)
+        => DecideCoreAsync(request, imageJpeg, ct);
+
+    private async Task<JevDecision> DecideCoreAsync(JevDecideRequest request, ReadOnlyMemory<byte>? imageJpeg, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (_options.Mode == JevMode.Off)
             throw new JevDisabledException("Jev is off; use the deterministic/manual control path.");
+        if (request.RequiredBoxQuestions is { Count: > 0 } && !SupportsBox)
+            throw new JevValidationException("Jev Box requires model jev-1.14.0 or jev-preview; no request was made.");
+        if (imageJpeg is { } suppliedImage && (suppliedImage.Length == 0 || suppliedImage.Length > 4 * 1024 * 1024))
+            throw new JevValidationException("The Jev image must contain 1 byte to 4 MiB; capture a fresh, bounded screenshot.");
         if (request.ExpiresAtUtc is { } expiry && expiry <= DateTimeOffset.UtcNow)
             throw new JevValidationException("The observation expired before the Jev decision started; reobserve before retrying.");
 
@@ -111,42 +124,88 @@ public sealed class JevController
                 instructions = "Does the current visible state show that the requested goal is complete?",
             };
         }
-
-        var body = new
+        if (request.RequiredNoulQuestions is { Count: > 0 } requiredQuestions)
         {
-            model = _options.Model,
-            state = new
+            foreach (var (questionId, instructions) in requiredQuestions)
             {
-                schema_version = 1,
-                goal = request.Goal,
-                observation_id = request.ObservationId,
-                context = request.Context,
-                candidates = request.Elements.Select(e => new
+                if (string.IsNullOrWhiteSpace(questionId) || questionId.Length > 100 || instructions is null
+                    || questions.ContainsKey(questionId))
+                    throw new JevValidationException("Required Noul question IDs must be unique, nonempty, and at most 100 characters, with nonnull instructions.");
+                questions.Add(questionId, new { type = "noul", instructions });
+            }
+        }
+        if (request.RequiredBoxQuestions is { Count: > 0 } boxQuestions)
+        {
+            if (imageJpeg is null)
+                throw new JevValidationException("Required Box questions need an image-backed Jev request.");
+            foreach (var (questionId, boxQuestion) in boxQuestions)
+            {
+                if (string.IsNullOrWhiteSpace(questionId) || questionId.Length > 100 || boxQuestion is null
+                    || string.IsNullOrWhiteSpace(boxQuestion.TargetVisibleQuestionId)
+                    || boxQuestion.TargetDescription is not { Length: > 0 and <= 300 }
+                    || request.RequiredNoulQuestions?.ContainsKey(boxQuestion.TargetVisibleQuestionId) != true
+                    || questions.ContainsKey(questionId))
+                    throw new JevValidationException("Required Box questions need unique IDs, a matching required target-visible Noul, and a target description of 1-300 characters.");
+                questions.Add(questionId, new
                 {
-                    id = e.Id,
-                    role = e.Role,
-                    name = e.Name,
-                    current_value = e.CurrentValue,
-                    enabled = e.Enabled,
-                    operations = e.Operations,
-                    metadata = e.Extra,
-                }),
-                candidate_count = request.Elements.Count,
-                candidate_set_complete = request.CandidateSetComplete,
-                expires_at_utc = request.ExpiresAtUtc,
-                observed_text = request.ObservedText,
-                observed_text_truncated = request.ObservedTextTruncated,
-                candidate_role_filter = request.CandidateRoleFilter,
-                candidate_set_issue = request.CandidateSetIssue,
-                key_bindings = request.KeyBindings ?? [],
-                recent_actions = request.RecentActions ?? [],
-            },
-            questions,
+                    type = "box",
+                    instructions = $"A tight box around the single visible UI target described here: {boxQuestion.TargetDescription}. Use the current screenshot; do not infer clickability.",
+                });
+            }
+        }
+
+        var state = new Dictionary<string, object?>
+        {
+            ["schema_version"] = 1,
+            ["goal"] = request.Goal,
+            ["observation_id"] = request.ObservationId,
+            ["context"] = request.Context,
+            ["candidates"] = request.Elements.Select(e => new
+            {
+                id = e.Id,
+                role = e.Role,
+                name = e.Name,
+                current_value = e.CurrentValue,
+                enabled = e.Enabled,
+                operations = e.Operations,
+                metadata = e.Extra,
+            }),
+            ["candidate_count"] = request.Elements.Count,
+            ["candidate_set_complete"] = request.CandidateSetComplete,
+            ["expires_at_utc"] = request.ExpiresAtUtc,
+            ["observed_text"] = request.ObservedText,
+            ["observed_text_truncated"] = request.ObservedTextTruncated,
+            ["candidate_role_filter"] = request.CandidateRoleFilter,
+            ["candidate_set_issue"] = request.CandidateSetIssue,
+            ["key_bindings"] = request.KeyBindings ?? [],
+            ["recent_actions"] = request.RecentActions ?? [],
         };
-        var requestJson = JsonSerializer.Serialize(body);
+        var body = new Dictionary<string, object?>
+        {
+            ["model"] = _options.Model,
+            ["state"] = state,
+            ["questions"] = questions,
+        };
+        var diagnosticBody = new Dictionary<string, object?>(body);
+        bool includeImages = false;
+        if (imageJpeg is { } image)
+        {
+            string imageReference = "game-image-" + Guid.NewGuid().ToString("N");
+            state["screenshot"] = imageReference;
+            body["assets"] = new Dictionary<string, object>
+            {
+                [imageReference] = new { type = "image", format = "jpg", data_base64 = Convert.ToBase64String(image.Span) },
+            };
+            diagnosticBody["assets"] = new Dictionary<string, object>
+            {
+                [imageReference] = new { type = "image", format = "jpg", data_base64 = "<redacted>" },
+            };
+            includeImages = true;
+        }
+        var requestJson = JsonSerializer.Serialize(diagnosticBody);
 
         var started = Stopwatch.GetTimestamp();
-        var raw = await _client.PostAsync(body, ct, request.MaxRetriesOverride).ConfigureAwait(false);
+        var raw = await _client.PostAsync(body, ct, request.MaxRetriesOverride, includeImages).ConfigureAwait(false);
         var latencyMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         if (request.ExpiresAtUtc is { } decisionExpiry && decisionExpiry <= DateTimeOffset.UtcNow)
             throw new JevValidationException("The observation expired while Jev was deciding; no action may be dispatched. Reobserve and retry.");
@@ -163,10 +222,24 @@ public sealed class JevController
         using (doc)
         {
             var root = doc.RootElement;
-            if (!root.TryGetProperty("answers", out var answers))
-                throw new JevValidationException("Invalid Jev response: missing 'answers'.");
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new JevValidationException("Invalid Jev response: root must be an object.");
+            RejectDuplicateProperties(root, "response");
+            if (!root.TryGetProperty("answers", out var answers) || answers.ValueKind != JsonValueKind.Object)
+                throw new JevValidationException("Invalid Jev response: missing object 'answers'.");
 
-            var operationAnswer = ValidateChoice(answers, "operation", operationCriteria.Keys.ToHashSet());
+            var requiredNoulProbabilities = new Dictionary<string, double>(StringComparer.Ordinal);
+            if (request.RequiredNoulQuestions is { } requiredNoulQuestions)
+                foreach (string questionId in requiredNoulQuestions.Keys)
+                    requiredNoulProbabilities.Add(questionId, ValidateRequiredNoul(answers, questionId));
+            var requiredBoxDecisions = new Dictionary<string, JevBoxDecision>(StringComparer.Ordinal);
+            if (request.RequiredBoxQuestions is { } requiredBoxQuestions)
+                foreach (var (questionId, boxQuestion) in requiredBoxQuestions)
+                    if (TryValidateRequiredBox(answers, questionId,
+                            requiredNoulProbabilities[boxQuestion.TargetVisibleQuestionId], latencyMs, out var box))
+                        requiredBoxDecisions.Add(questionId, box);
+
+            var operationAnswer = ValidateChoice(answers, "operation", operationCriteria.Keys.ToHashSet(), requireType: imageJpeg.HasValue);
             var operation = operationAnswer.Choice;
 
             string? targetElementId = null;
@@ -176,7 +249,7 @@ public sealed class JevController
             double? topChoiceMargin = null;
             if (built.TargetsByOperation.TryGetValue(operation, out var opTargets))
             {
-                var targetAnswer = ValidateChoice(answers, operation.ToLowerInvariant() + "_target", opTargets.Keys.ToHashSet());
+                var targetAnswer = ValidateChoice(answers, operation.ToLowerInvariant() + "_target", opTargets.Keys.ToHashSet(), requireType: imageJpeg.HasValue);
                 targetConfidence = targetAnswer.Confidence;
                 var chosenElement = opTargets[targetAnswer.Choice];
                 targetElementId = chosenElement.Id;
@@ -220,7 +293,13 @@ public sealed class JevController
                 goalReached = noulValue >= 0.5;
             }
 
-            var model = root.TryGetProperty("model", out var modelProperty) ? modelProperty.GetString() ?? _options.Model : _options.Model;
+            string model;
+            if (imageJpeg.HasValue)
+                model = RequireReportedModel(root, "image Choice");
+            else if (root.TryGetProperty("model", out var modelProperty) && modelProperty.ValueKind == JsonValueKind.String)
+                model = modelProperty.GetString() ?? _options.Model;
+            else
+                model = _options.Model;
             if (request.ExpiresAtUtc is { } finalExpiry && finalExpiry <= DateTimeOffset.UtcNow)
                 throw new JevValidationException("The observation expired while Jev was deciding; no action may be dispatched. Reobserve and retry.");
 
@@ -241,15 +320,187 @@ public sealed class JevController
                 topChoiceMargin,
                 request.ExpiresAtUtc,
                 targetConfidence,
-                new Dictionary<string, double>(operationAnswer.Probabilities, StringComparer.Ordinal));
+                new Dictionary<string, double>(operationAnswer.Probabilities, StringComparer.Ordinal),
+                requiredNoulProbabilities,
+                requiredBoxDecisions);
         }
     }
+
+    /// <summary>Locates one requested target and gates the box with a required Noul visibility answer.</summary>
+    public async Task<JevBoxDecision> LocateBoxAsync(
+        string observationId,
+        string goal,
+        string targetDescription,
+        ReadOnlyMemory<byte> imageJpeg,
+        CancellationToken ct = default)
+    {
+        if (_options.Mode == JevMode.Off)
+            throw new JevDisabledException("Jev is off; no image or Box request was made.");
+        if (!SupportsBox)
+            throw new JevValidationException("Jev Box requires model jev-1.14.0 or jev-preview; no request was made.");
+        if (imageJpeg.Length == 0 || imageJpeg.Length > 4 * 1024 * 1024)
+            throw new JevValidationException("The Jev image must contain 1 byte to 4 MiB; capture a fresh, bounded screenshot.");
+        if (string.IsNullOrWhiteSpace(observationId) || string.IsNullOrWhiteSpace(goal)
+            || string.IsNullOrWhiteSpace(targetDescription) || targetDescription.Length > 300)
+            throw new JevValidationException("A frame ID, goal, and target description of at most 300 characters are required for Box.");
+
+        string imageReference = "game-box-" + Guid.NewGuid().ToString("N");
+        var body = new Dictionary<string, object?>
+        {
+            ["model"] = _options.Model,
+            ["state"] = new Dictionary<string, object?>
+            {
+                ["observation_id"] = observationId,
+                ["goal"] = goal,
+                ["target_description"] = targetDescription,
+                ["screenshot"] = imageReference,
+            },
+            ["assets"] = new Dictionary<string, object>
+            {
+                [imageReference] = new { type = "image", format = "jpg", data_base64 = Convert.ToBase64String(imageJpeg.Span) },
+            },
+            ["questions"] = new Dictionary<string, object>
+            {
+                ["target_visible"] = new
+                {
+                    type = "noul",
+                    instructions = "Is the target described in `target_description` visibly present in `screenshot`? Judge presence only; do not infer clickability or enabled state.",
+                    criteria = new Dictionary<string, string>
+                    {
+                        ["true"] = "The exact described target is clearly visible in the screenshot.",
+                        ["false"] = "The target is absent, ambiguous, or cannot be identified confidently.",
+                    },
+                },
+                ["target_box"] = new
+                {
+                    type = "box",
+                    instructions = "A tight box around the single visible game UI target described in `target_description` in `screenshot`.",
+                },
+            },
+        };
+
+        long started = Stopwatch.GetTimestamp();
+        var raw = await _client.PostAsync(body, ct, maxRetriesOverride: 0, includeImages: true).ConfigureAwait(false);
+        long latencyMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        JsonDocument document;
+        try { document = JsonDocument.Parse(raw.Body); }
+        catch (JsonException ex) { throw new JevValidationException("Invalid Jev Box response: not valid JSON.", ex); }
+        using (document)
+        {
+            JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new JevValidationException("Invalid Jev Box response: root must be an object.");
+            RejectDuplicateProperties(root, "Box response");
+            if (!root.TryGetProperty("answers", out var answers) || answers.ValueKind != JsonValueKind.Object)
+                throw new JevValidationException("Invalid Jev Box response: missing object 'answers'.");
+            double targetVisible = ValidateRequiredNoul(answers, "target_visible");
+            if (!answers.TryGetProperty("target_box", out var boxAnswer)
+                || boxAnswer.ValueKind != JsonValueKind.Object
+                || !boxAnswer.TryGetProperty("type", out var type)
+                || type.ValueKind != JsonValueKind.String || type.GetString() != "box"
+                || !boxAnswer.TryGetProperty("box", out var coordinates)
+                || !boxAnswer.TryGetProperty("confidence", out var confidenceElement)
+                || confidenceElement.ValueKind != JsonValueKind.Number)
+                throw new JevValidationException("Invalid Jev Box response: missing typed box, coordinates, or confidence.");
+
+            double confidence = confidenceElement.GetDouble();
+            double top = ReadBoxEdge(coordinates, "top"), bottom = ReadBoxEdge(coordinates, "bottom");
+            double left = ReadBoxEdge(coordinates, "left"), right = ReadBoxEdge(coordinates, "right");
+            if (!double.IsFinite(confidence) || confidence is < 0 or > 1
+                || top < 0 || left < 0 || bottom > 1 || right > 1 || top >= bottom || left >= right)
+                throw new JevValidationException("Invalid Jev Box response: confidence or normalized edges are out of range.");
+
+            string model = RequireReportedModel(root, "Box");
+            return new JevBoxDecision(targetVisible, confidence, top, bottom, left, right, latencyMs, model);
+        }
+    }
+
+    private string RequireReportedModel(JsonElement root, string responseKind)
+    {
+        if (!root.TryGetProperty("model", out var modelElement) || modelElement.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(modelElement.GetString()))
+            throw new JevValidationException($"Invalid Jev {responseKind} response: a string model identity is required.");
+        string model = modelElement.GetString()!;
+        if (!string.Equals(model, _options.Model, StringComparison.OrdinalIgnoreCase))
+            throw new JevValidationException($"Invalid Jev {responseKind} response: reported model '{model}' does not match configured model '{_options.Model}'.");
+        return model;
+    }
+
+    private static void RejectDuplicateProperties(JsonElement element, string path)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in element.EnumerateObject())
+            {
+                if (!names.Add(property.Name))
+                    throw new JevValidationException($"Invalid Jev response: duplicate property '{path}.{property.Name}'.");
+                RejectDuplicateProperties(property.Value, path + "." + property.Name);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            int index = 0;
+            foreach (var item in element.EnumerateArray()) RejectDuplicateProperties(item, $"{path}[{index++}]");
+        }
+    }
+
+    private static double ReadBoxEdge(JsonElement box, string name)
+    {
+        if (box.ValueKind != JsonValueKind.Object || !box.TryGetProperty(name, out var edge) || edge.ValueKind != JsonValueKind.Number)
+            throw new JevValidationException($"Invalid Jev Box response: missing numeric '{name}' edge.");
+        double value = edge.GetDouble();
+        if (!double.IsFinite(value)) throw new JevValidationException($"Invalid Jev Box response: non-finite '{name}' edge.");
+        return value;
+    }
+
+    private bool TryValidateRequiredBox(JsonElement answers, string questionId, double targetVisibleProbability,
+        long latencyMs, out JevBoxDecision decision)
+    {
+        decision = null!;
+        if (answers.ValueKind != JsonValueKind.Object || !answers.TryGetProperty(questionId, out var answer)
+            || answer.ValueKind != JsonValueKind.Object
+            || !answer.TryGetProperty("type", out var type)
+            || type.ValueKind != JsonValueKind.String || type.GetString() != "box"
+            || !answer.TryGetProperty("box", out var coordinates)
+            || !answer.TryGetProperty("confidence", out var confidenceElement)
+            || confidenceElement.ValueKind != JsonValueKind.Number)
+            return false;
+        try
+        {
+            double confidence = confidenceElement.GetDouble();
+            double top = ReadBoxEdge(coordinates, "top"), bottom = ReadBoxEdge(coordinates, "bottom");
+            double left = ReadBoxEdge(coordinates, "left"), right = ReadBoxEdge(coordinates, "right");
+            if (!double.IsFinite(confidence) || confidence is < 0 or > 1
+                || top < 0 || left < 0 || bottom > 1 || right > 1 || top >= bottom || left >= right)
+                return false;
+            decision = new JevBoxDecision(targetVisibleProbability, confidence, top, bottom, left, right, latencyMs, _options.Model);
+            return true;
+        }
+        catch (JevValidationException) { return false; }
+    }
+
+
+    private static double ValidateRequiredNoul(JsonElement answers, string questionId)
+    {
+        if (answers.ValueKind != JsonValueKind.Object || !answers.TryGetProperty(questionId, out var answer)
+            || answer.ValueKind != JsonValueKind.Object
+            || !answer.TryGetProperty("type", out var answerType)
+            || answerType.ValueKind != JsonValueKind.String || answerType.GetString() != "noul"
+            || !answer.TryGetProperty("noul", out var score)
+            || score.ValueKind != JsonValueKind.Number)
+            throw new JevValidationException($"Invalid Jev response: required Noul answer '{questionId}' is missing or malformed.");
+        double value = score.GetDouble();
+        if (!double.IsFinite(value) || value is < 0 or > 1)
+            throw new JevValidationException($"Invalid Jev response: required Noul answer '{questionId}' is out of range.");
+        return value;
+    }
+
+    private sealed record ScoreDisambiguationResult(string CandidateKey, double Confidence);
 
     /// <summary>Near-tied Choice targets get one follow-up Score call ranking match strength.
     /// Score is a refinement, not a gate: any failure or invalid answer keeps the original
     /// Choice winner instead of throwing.</summary>
-    private sealed record ScoreDisambiguationResult(string CandidateKey, double Confidence);
-
     private async Task<ScoreDisambiguationResult?> TryDisambiguateByScoreAsync(
         JevDecideRequest request,
         string operation,
@@ -371,10 +622,14 @@ public sealed class JevController
         return description;
     }
 
-    private static ChoiceAnswer ValidateChoice(JsonElement answers, string key, HashSet<string> validIds)
+    private static ChoiceAnswer ValidateChoice(JsonElement answers, string key, HashSet<string> validIds, bool requireType = false)
     {
         if (!answers.TryGetProperty(key, out var answerElement))
             throw new JevValidationException($"Invalid Jev response: missing answer '{key}'.");
+        if (requireType && (answerElement.ValueKind != JsonValueKind.Object
+            || !answerElement.TryGetProperty("type", out var answerType)
+            || answerType.ValueKind != JsonValueKind.String || answerType.GetString() != "choice"))
+            throw new JevValidationException($"Invalid Jev response: answer '{key}' must have type 'choice'.");
         try
         {
             var choice = answerElement.GetProperty("choice").GetString();

@@ -49,6 +49,17 @@ public sealed class ToolCatalogTests
     }
 
     [Fact]
+    public void ExperimentalGameJevActIsCataloguedAsDestructiveGameInput()
+    {
+        var entry = ToolCatalog.Get("game_jev_act");
+        Assert.NotNull(entry);
+        Assert.False(entry.ReadOnly);
+        Assert.True(entry.Destructive);
+        Assert.True(entry.Game);
+        Assert.True(entry.OpenWorld);
+    }
+
+    [Fact]
     public void ReadOnlyToolsAreNeverDestructive()
     {
         Assert.DoesNotContain(ToolCatalog.Entries.Values, e => e.ReadOnly && e.Destructive);

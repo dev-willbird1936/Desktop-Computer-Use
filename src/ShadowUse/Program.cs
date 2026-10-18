@@ -59,8 +59,11 @@ internal static class Program
 
         WHICH TOGGLES
         GameMode: playing a game or a window with no UIA tree. HumanizedInput: input must look human; usually wanted for games.
-        FastInput: lower latency needed; usually wanted for games (pace=fast for one call). JevMode: DCU can read the elements,
-        actions or inputs (UIA tree, browser candidates) and you want a fast pick among them; not for games.
+        FastInput: lower latency needed; usually wanted for games (pace=fast for one call). JevMode controls recommendation versus
+        execution for supported desktop/browser actions; GameMode does not enable Jev or authorize input.
+        Experimental BTD2 Jev actions require EnableExperimentalGameJevAct=true in the isolated experimental MCP settings,
+        JevMode=fast_loop, DecisionBackend=jev, model jev-1.14.0 or jev-preview, a caller-bounded action list, and execute=true to dispatch.
+        Preview with execute=false first. Click menus use one image request for Choice/Noul/Box; key-only menus send state/history without an image. max_actions defaults to 1; an opt-in serial run is limited to 4 unique actions and 60 seconds, uses a fresh frame before each decision, and does not verify after each dispatched action. Input sent is not proof of success. Static-menu region stability is one-step only, explicitly opt-in and keeps post-action verification; it never overrides unavailable frame evidence or detected camera motion. Refusals require reobserve, not retries. Score cutoffs are configured in the isolated settings.json: ExperimentalGameJevActChoiceThreshold (default 0.85), ExperimentalGameJevActClickThreshold (default 0.90), and ExperimentalGameJevActAmbiguityMargin (default 0.10). Zero disables only that score cutoff; all structural, model, frame, region, target, and ownership checks remain.
 
         Tool list: only the core desktop loop is listed. More capabilities (browser, workflows,
         subgoals, memory, files, HTTP, grids, voice, review, isolation, demonstrations, Jev) are
@@ -134,6 +137,8 @@ internal static class Program
         services.AddSingleton<IScreenDiscoveryBackend, LocalScreenDiscoveryBackend>();
         services.AddSingleton<ScreenDiscoveryService>();
         services.AddSingleton<GameTools>();
+        services.AddSingleton<IGameJevActionFrameSource, GameJevActionFrameSource>();
+        services.AddSingleton<IGameJevActionDispatcher, GameJevActionDispatcher>();
         services.AddSingleton<ImageUiCandidateTools>();
         services.AddSingleton<GameJevTools>();
         services.AddSingleton<ExperienceStore>();

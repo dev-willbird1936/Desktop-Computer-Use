@@ -21,14 +21,18 @@ public static partial class InteractiveInput
 {
     private const string ForegroundLost = "target window lost the foreground; humanized input stopped";
 
-    private sealed class Run(IntPtr root, uint pid, uint threadId, CancellationToken ct)
+    /// <summary>Optional cursor-lock probe override used by controlled input tests.</summary>
+    public static Func<IntPtr, bool>? CursorLockProvider { get; set; }
+
+    private sealed class Run(IntPtr root, uint threadId, CancellationToken ct)
     {
         public readonly Random Rng = new();
         public readonly uint ThreadId = threadId;
+        public CancellationToken CancellationToken => ct;
         private bool? locked;
 
         /// <summary>True when a 1 px nudge does not move the cursor: the game recentres or locks it.</summary>
-        public bool CursorLocked => locked ??= ProbeCursorLocked(this);
+        public bool CursorLocked => locked ??= CursorLockProvider?.Invoke(root) ?? ProbeCursorLocked(this);
 
         /// <summary>Random pause in [lo, hi] ms, scaled down in fast pace.</summary>
         public int P(int lo, int hi) => InputPace.Fast
@@ -63,10 +67,7 @@ public static partial class InteractiveInput
         public bool HasForeground()
         {
             var fg = ForegroundWindowProvider();
-            if (fg == IntPtr.Zero) return false;
-            if (GetAncestor(fg, GA_ROOT) == root) return true;
-            NativeMethods.GetWindowThreadProcessId(fg, out var fgPid);
-            return fgPid == pid;
+            return fg != IntPtr.Zero && GetAncestor(fg, GA_ROOT) == root;
         }
     }
 
@@ -75,9 +76,9 @@ public static partial class InteractiveInput
         => RunAsync(hwnd, method, ct, () =>
         {
             var root = GetAncestor(hwnd, GA_ROOT);
-            var threadId = NativeMethods.GetWindowThreadProcessId(root, out var pid);
+            var threadId = NativeMethods.GetWindowThreadProcessId(root, out _);
             timeBeginPeriod(1);
-            try { return body(new Run(root, pid, threadId, ct)); }
+            try { return body(new Run(root, threadId, ct)); }
             finally { timeEndPeriod(1); }
         }, detail, activateTarget, restoreCursor);
 
@@ -92,20 +93,40 @@ public static partial class InteractiveInput
                 width = Math.Min(f.Width, f.Height);
             }
             r.Wait(r.P(40, 140));
+            if (r.CursorLocked) return "cursor_locked_click_refused";
             if (Glide(r, o, tx, ty, width) is { } lost) return lost;
             if (Dwell(r, r.P(120, 600)) is { } lostAfterDwell) return lostAfterDwell;
-            var (down, up) = ButtonFlags(button);
+            uint down = ButtonFlags(button).Down;
+            int buttonVk = button switch { MouseButton.Right => VkRButton, MouseButton.Middle => VkMButton, _ => VkLButton };
             for (int i = 0; i < clickCount; i++)
             {
+                ct.ThrowIfCancellationRequested();
                 if (!r.HasForeground()) return ForegroundLost;
+                if (CursorPosition() is not { } settledCursor
+                    || Math.Abs((long)settledCursor.X - tx) > 2 || Math.Abs((long)settledCursor.Y - ty) > 2)
+                    return "cursor_did_not_reach_click_target";
                 bool pressed = false;
+                string? clickError = null, releaseError = null;
+                OperationCanceledException? cancellation = null;
                 try
                 {
-                    if (!Send(Pure(down))) return "SendInput rejected the button press";
-                    pressed = true;
-                    if (!r.WaitWhileForeground(r.P(50, 180))) return ForegroundLost;
+                    if (!Send(Pure(down))) clickError = "SendInput rejected the button press";
+                    else
+                    {
+                        pressed = true;
+                        if (!r.WaitWhileForeground(r.P(50, 180))) clickError = ForegroundLost;
+                    }
                 }
-                finally { if (pressed) Send(Pure(up)); }
+                catch (OperationCanceledException ex) { cancellation = ex; }
+                finally
+                {
+                    if (pressed) releaseError = ReleaseInputWithRecovery(buttonVk, hwnd, IntPtr.Zero);
+                }
+                if (releaseError is not null)
+                    return cancellation is null ? releaseError : $"Input was cancelled; {releaseError}";
+                if (cancellation is not null)
+                    throw new OperationCanceledException(cancellation.Message, cancellation, ct);
+                if (clickError is not null) return clickError;
                 if (i + 1 < clickCount) r.Wait(r.P(60, 170));
             }
             r.Wait(r.P(30, 250));

@@ -1,0 +1,1832 @@
+{
+  "schema_version": 1,
+  "title": "Frozen-image Jev Box vs DCU calibrated BTD2 detector speed benchmark",
+  "input": {
+    "path": "bench\\results\\jev-1.14-btdb2-hero-selection-20261015\\input-redacted.png",
+    "sha256": "218a6d734b0ca7ee4d3eb74eff9a872d5ff7ed7e17fcde269387fdf1d56f3063",
+    "bytes": 719397,
+    "width": 1272,
+    "height": 713
+  },
+  "reference": {
+    "path": "bench\\results\\jev-1.14-btdb2-hero-selection-20261015\\same-image-box-comparison.json",
+    "method": "existing exact-image one-to-one maximum-IoU Hungarian matching",
+    "hit_threshold_iou": 0.5,
+    "target_count": 16
+  },
+  "task": {
+    "description": "Return 16 individual hero card frame boxes; no hero-name recognition or action selection.",
+    "targets": [
+      {
+        "id": "r1c1",
+        "description": "the complete selectable hero card frame in row 1, column 1 of the two-row hero selection grid"
+      },
+      {
+        "id": "r1c2",
+        "description": "the complete selectable hero card frame in row 1, column 2 of the two-row hero selection grid"
+      },
+      {
+        "id": "r1c3",
+        "description": "the complete selectable hero card frame in row 1, column 3 of the two-row hero selection grid"
+      },
+      {
+        "id": "r1c4",
+        "description": "the complete selectable hero card frame in row 1, column 4 of the two-row hero selection grid"
+      },
+      {
+        "id": "r1c5",
+        "description": "the complete selectable hero card frame in row 1, column 5 of the two-row hero selection grid"
+      },
+      {
+        "id": "r1c6",
+        "description": "the complete selectable hero card frame in row 1, column 6 of the two-row hero selection grid"
+      },
+      {
+        "id": "r1c7",
+        "description": "the complete selectable hero card frame in row 1, column 7 of the two-row hero selection grid"
+      },
+      {
+        "id": "r1c8",
+        "description": "the complete selectable hero card frame in row 1, column 8 of the two-row hero selection grid"
+      },
+      {
+        "id": "r2c1",
+        "description": "the complete selectable hero card frame in row 2, column 1 of the two-row hero selection grid"
+      },
+      {
+        "id": "r2c2",
+        "description": "the complete selectable hero card frame in row 2, column 2 of the two-row hero selection grid"
+      },
+      {
+        "id": "r2c3",
+        "description": "the complete selectable hero card frame in row 2, column 3 of the two-row hero selection grid"
+      },
+      {
+        "id": "r2c4",
+        "description": "the complete selectable hero card frame in row 2, column 4 of the two-row hero selection grid"
+      },
+      {
+        "id": "r2c5",
+        "description": "the complete selectable hero card frame in row 2, column 5 of the two-row hero selection grid"
+      },
+      {
+        "id": "r2c6",
+        "description": "the complete selectable hero card frame in row 2, column 6 of the two-row hero selection grid"
+      },
+      {
+        "id": "r2c7",
+        "description": "the complete selectable hero card frame in row 2, column 7 of the two-row hero selection grid"
+      },
+      {
+        "id": "r2c8",
+        "description": "the complete selectable hero card frame in row 2, column 8 of the two-row hero selection grid"
+      }
+    ],
+    "proposal_roi": {
+      "x_min": 160,
+      "x_max": 870,
+      "y_min": 410,
+      "y_max": 623
+    }
+  },
+  "timing_contract": "Preloaded PNG bytes and fixed task specification to complete, parsed, normalized pixel-space box list. Local path includes PNG decode, production calibrated detector, card proposal filtering and normalization. Jev path includes Box-question construction, image base64 and JSON serialization, HTTP upload/network/full response, JSON parsing and box normalization. File I/O, process startup, overlays, logging and reference scoring are excluded. One unscored warm-up per path; five measured pairs in alternating order; HTTP client is reused; no answer cache or request retries.",
+  "methods": {
+    "local": {
+      "name": "DCU FastUiCandidateDetector method=bloons-template",
+      "scope": "Production local calibrated BTD2 detector; only the 16 hero-card boxes in the specified task are scored."
+    },
+    "jev": {
+      "model": "jev-1.14.0",
+      "name": "TypeSafe image-backed Box batch",
+      "scope": "One Box question per card in one API request; no action is dispatched. Redacted screenshot only."
+    }
+  },
+  "warmups_passed": true,
+  "local_median_ms": 49.567,
+  "local_range_ms": {
+    "min": 41.7502,
+    "max": 56.4181
+  },
+  "jev_median_ms": 553.752,
+  "jev_range_ms": {
+    "min": 338.8685,
+    "max": 588.9097
+  },
+  "paired_timings": [
+    {
+      "pair": 1,
+      "local_ms": 41.7502,
+      "jev_ms": 553.752,
+      "jev_speedup": 0.07539512272641906
+    },
+    {
+      "pair": 2,
+      "local_ms": 56.4181,
+      "jev_ms": 371.1959,
+      "jev_speedup": 0.1519900947181798
+    },
+    {
+      "pair": 3,
+      "local_ms": 51.8262,
+      "jev_ms": 555.525,
+      "jev_speedup": 0.09329229107600918
+    },
+    {
+      "pair": 4,
+      "local_ms": 49.567,
+      "jev_ms": 338.8685,
+      "jev_speedup": 0.14627207899229347
+    },
+    {
+      "pair": 5,
+      "local_ms": 49.3496,
+      "jev_ms": 588.9097,
+      "jev_speedup": 0.08379824614877289
+    }
+  ],
+  "local_quality": {
+    "MeanHits": 16,
+    "MeanIou": 0.8143883943121818,
+    "MeanPrecision": 1,
+    "MeanRecall": 1,
+    "MeanPredictionCount": 16,
+    "MeanFalsePositives": 0,
+    "MeanFalseNegatives": 0
+  },
+  "jev_quality": {
+    "MeanHits": 16,
+    "MeanIou": 0.7015890856071865,
+    "MeanPrecision": 1,
+    "MeanRecall": 1,
+    "MeanPredictionCount": 16,
+    "MeanFalsePositives": 0,
+    "MeanFalseNegatives": 0
+  },
+  "jev_speedup_ratio_local_over_jev": 0.08951118912437338,
+  "quality_not_reduced": false,
+  "jev_faster_without_quality_loss": false,
+  "run_count": 12,
+  "runs": [
+    {
+      "Method": "bloons-template",
+      "Phase": "warmup",
+      "Pair": 0,
+      "ElapsedMs": 479.751,
+      "DetectorPerceptionMs": 419.744,
+      "CandidateSetComplete": false,
+      "CandidateSetIssue": "The named Bloons TD Battles 2 layout did not fully match; 22/23 anchors passed. unsupported frame aspect ratio 1.784; expected visual anchor \u0027opponent-profile-banner\u0027 was missing (fraction=0.020, required=0.035)",
+      "Boxes": [
+        {
+          "Left": 177,
+          "Top": 407,
+          "Right": 254,
+          "Bottom": 507
+        },
+        {
+          "Left": 263,
+          "Top": 407,
+          "Right": 340,
+          "Bottom": 507
+        },
+        {
+          "Left": 350,
+          "Top": 407,
+          "Right": 427,
+          "Bottom": 507
+        },
+        {
+          "Left": 437,
+          "Top": 407,
+          "Right": 514,
+          "Bottom": 507
+        },
+        {
+          "Left": 524,
+          "Top": 407,
+          "Right": 601,
+          "Bottom": 507
+        },
+        {
+          "Left": 612,
+          "Top": 407,
+          "Right": 689,
+          "Bottom": 507
+        },
+        {
+          "Left": 699,
+          "Top": 407,
+          "Right": 776,
+          "Bottom": 507
+        },
+        {
+          "Left": 786,
+          "Top": 407,
+          "Right": 863,
+          "Bottom": 507
+        },
+        {
+          "Left": 177,
+          "Top": 519,
+          "Right": 254,
+          "Bottom": 615
+        },
+        {
+          "Left": 263,
+          "Top": 519,
+          "Right": 340,
+          "Bottom": 615
+        },
+        {
+          "Left": 350,
+          "Top": 519,
+          "Right": 427,
+          "Bottom": 615
+        },
+        {
+          "Left": 437,
+          "Top": 519,
+          "Right": 514,
+          "Bottom": 615
+        },
+        {
+          "Left": 524,
+          "Top": 519,
+          "Right": 601,
+          "Bottom": 615
+        },
+        {
+          "Left": 612,
+          "Top": 519,
+          "Right": 689,
+          "Bottom": 615
+        },
+        {
+          "Left": 699,
+          "Top": 519,
+          "Right": 776,
+          "Bottom": 615
+        },
+        {
+          "Left": 786,
+          "Top": 519,
+          "Right": 863,
+          "Bottom": 615
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.8143883943121817,
+        "PerTargetIou": [
+          0.7451923076923077,
+          0.7742830712303422,
+          0.8228120516499282,
+          0.8334329071573665,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8540357660705655,
+          0.7154340836012861,
+          0.7426981919332406,
+          0.7885536398467433,
+          0.7983494797273053,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8176982591876208
+        ]
+      },
+      "Error": null,
+      "ReportedModel": null,
+      "MeanBoxConfidence": null
+    },
+    {
+      "Method": "jev-box",
+      "Phase": "warmup",
+      "Pair": 0,
+      "ElapsedMs": 897.3824,
+      "DetectorPerceptionMs": null,
+      "CandidateSetComplete": null,
+      "CandidateSetIssue": null,
+      "Boxes": [
+        {
+          "Left": 178.08,
+          "Top": 413.53999999999996,
+          "Right": 267.12,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 241.68,
+          "Top": 413.53999999999996,
+          "Right": 330.72,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 330.72,
+          "Top": 413.53999999999996,
+          "Right": 419.76000000000005,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 432.48,
+          "Top": 413.53999999999996,
+          "Right": 521.52,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 534.24,
+          "Top": 413.53999999999996,
+          "Right": 597.8399999999999,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 585.12,
+          "Top": 413.53999999999996,
+          "Right": 686.88,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 699.6,
+          "Top": 413.53999999999996,
+          "Right": 788.64,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 763.1999999999999,
+          "Top": 413.53999999999996,
+          "Right": 864.96,
+          "Bottom": 534.75
+        },
+        {
+          "Left": 165.36,
+          "Top": 520.49,
+          "Right": 267.12,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 241.68,
+          "Top": 527.62,
+          "Right": 330.72,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 330.72,
+          "Top": 527.62,
+          "Right": 419.76000000000005,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 432.48,
+          "Top": 527.62,
+          "Right": 521.52,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 534.24,
+          "Top": 527.62,
+          "Right": 610.56,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 597.8399999999999,
+          "Top": 534.75,
+          "Right": 699.6,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 699.6,
+          "Top": 534.75,
+          "Right": 801.36,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 763.1999999999999,
+          "Top": 520.49,
+          "Right": 864.96,
+          "Bottom": 620.31
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.6973526763856757,
+        "PerTargetIou": [
+          0.6168451243612139,
+          0.6830363855457409,
+          0.7174713543941108,
+          0.7525338061340602,
+          0.7588741078407726,
+          0.6704756436574832,
+          0.7424472640448326,
+          0.6192191151652497,
+          0.6539386808792951,
+          0.704370600226525,
+          0.6964317645287854,
+          0.8341492739328576,
+          0.7254278968573041,
+          0.6434438137281299,
+          0.6353495403051113,
+          0.7036284505693386
+        ]
+      },
+      "Error": null,
+      "ReportedModel": "jev-1.14.0",
+      "MeanBoxConfidence": 0.8468750000000002
+    },
+    {
+      "Method": "bloons-template",
+      "Phase": "measured",
+      "Pair": 1,
+      "ElapsedMs": 41.7502,
+      "DetectorPerceptionMs": 24.85,
+      "CandidateSetComplete": false,
+      "CandidateSetIssue": "The named Bloons TD Battles 2 layout did not fully match; 22/23 anchors passed. unsupported frame aspect ratio 1.784; expected visual anchor \u0027opponent-profile-banner\u0027 was missing (fraction=0.020, required=0.035)",
+      "Boxes": [
+        {
+          "Left": 177,
+          "Top": 407,
+          "Right": 254,
+          "Bottom": 507
+        },
+        {
+          "Left": 263,
+          "Top": 407,
+          "Right": 340,
+          "Bottom": 507
+        },
+        {
+          "Left": 350,
+          "Top": 407,
+          "Right": 427,
+          "Bottom": 507
+        },
+        {
+          "Left": 437,
+          "Top": 407,
+          "Right": 514,
+          "Bottom": 507
+        },
+        {
+          "Left": 524,
+          "Top": 407,
+          "Right": 601,
+          "Bottom": 507
+        },
+        {
+          "Left": 612,
+          "Top": 407,
+          "Right": 689,
+          "Bottom": 507
+        },
+        {
+          "Left": 699,
+          "Top": 407,
+          "Right": 776,
+          "Bottom": 507
+        },
+        {
+          "Left": 786,
+          "Top": 407,
+          "Right": 863,
+          "Bottom": 507
+        },
+        {
+          "Left": 177,
+          "Top": 519,
+          "Right": 254,
+          "Bottom": 615
+        },
+        {
+          "Left": 263,
+          "Top": 519,
+          "Right": 340,
+          "Bottom": 615
+        },
+        {
+          "Left": 350,
+          "Top": 519,
+          "Right": 427,
+          "Bottom": 615
+        },
+        {
+          "Left": 437,
+          "Top": 519,
+          "Right": 514,
+          "Bottom": 615
+        },
+        {
+          "Left": 524,
+          "Top": 519,
+          "Right": 601,
+          "Bottom": 615
+        },
+        {
+          "Left": 612,
+          "Top": 519,
+          "Right": 689,
+          "Bottom": 615
+        },
+        {
+          "Left": 699,
+          "Top": 519,
+          "Right": 776,
+          "Bottom": 615
+        },
+        {
+          "Left": 786,
+          "Top": 519,
+          "Right": 863,
+          "Bottom": 615
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.8143883943121817,
+        "PerTargetIou": [
+          0.7451923076923077,
+          0.7742830712303422,
+          0.8228120516499282,
+          0.8334329071573665,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8540357660705655,
+          0.7154340836012861,
+          0.7426981919332406,
+          0.7885536398467433,
+          0.7983494797273053,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8176982591876208
+        ]
+      },
+      "Error": null,
+      "ReportedModel": null,
+      "MeanBoxConfidence": null
+    },
+    {
+      "Method": "jev-box",
+      "Phase": "measured",
+      "Pair": 1,
+      "ElapsedMs": 553.752,
+      "DetectorPerceptionMs": null,
+      "CandidateSetComplete": null,
+      "CandidateSetIssue": null,
+      "Boxes": [
+        {
+          "Left": 165.36,
+          "Top": 413.53999999999996,
+          "Right": 267.12,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 241.68,
+          "Top": 406.40999999999997,
+          "Right": 330.72,
+          "Bottom": 506.22999999999996
+        },
+        {
+          "Left": 318,
+          "Top": 420.66999999999996,
+          "Right": 419.76000000000005,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 419.76000000000005,
+          "Top": 413.53999999999996,
+          "Right": 521.52,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 521.52,
+          "Top": 406.40999999999997,
+          "Right": 597.8399999999999,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 597.8399999999999,
+          "Top": 413.53999999999996,
+          "Right": 686.88,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 699.6,
+          "Top": 413.53999999999996,
+          "Right": 788.64,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 763.1999999999999,
+          "Top": 413.53999999999996,
+          "Right": 864.96,
+          "Bottom": 541.88
+        },
+        {
+          "Left": 165.36,
+          "Top": 520.49,
+          "Right": 267.12,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 241.68,
+          "Top": 527.62,
+          "Right": 343.44,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 330.72,
+          "Top": 527.62,
+          "Right": 419.76000000000005,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 432.48,
+          "Top": 527.62,
+          "Right": 521.52,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 534.24,
+          "Top": 527.62,
+          "Right": 610.56,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 597.8399999999999,
+          "Top": 534.75,
+          "Right": 712.32,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 699.6,
+          "Top": 534.75,
+          "Right": 788.64,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 763.1999999999999,
+          "Top": 520.49,
+          "Right": 864.96,
+          "Bottom": 620.31
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.7035942032480254,
+        "PerTargetIou": [
+          0.6933602077030057,
+          0.6985874083298647,
+          0.6009100102831195,
+          0.6584670803673028,
+          0.8134542975308967,
+          0.7642128101611115,
+          0.7916400010520127,
+          0.5848283757961235,
+          0.6539386808792951,
+          0.6896502121504623,
+          0.6964317645287854,
+          0.8341492739328576,
+          0.7254278968573041,
+          0.5823385428280036,
+          0.7664822389989233,
+          0.7036284505693386
+        ]
+      },
+      "Error": null,
+      "ReportedModel": "jev-1.14.0",
+      "MeanBoxConfidence": 0.850625
+    },
+    {
+      "Method": "jev-box",
+      "Phase": "measured",
+      "Pair": 2,
+      "ElapsedMs": 371.1959,
+      "DetectorPerceptionMs": null,
+      "CandidateSetComplete": null,
+      "CandidateSetIssue": null,
+      "Boxes": [
+        {
+          "Left": 178.08,
+          "Top": 413.53999999999996,
+          "Right": 267.12,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 228.95999999999998,
+          "Top": 406.40999999999997,
+          "Right": 330.72,
+          "Bottom": 506.22999999999996
+        },
+        {
+          "Left": 318,
+          "Top": 413.53999999999996,
+          "Right": 432.48,
+          "Bottom": 513.36
+        },
+        {
+          "Left": 419.76000000000005,
+          "Top": 413.53999999999996,
+          "Right": 521.52,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 534.24,
+          "Top": 413.53999999999996,
+          "Right": 597.8399999999999,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 585.12,
+          "Top": 420.66999999999996,
+          "Right": 686.88,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 699.6,
+          "Top": 413.53999999999996,
+          "Right": 788.64,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 763.1999999999999,
+          "Top": 413.53999999999996,
+          "Right": 864.96,
+          "Bottom": 534.75
+        },
+        {
+          "Left": 165.36,
+          "Top": 520.49,
+          "Right": 267.12,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 228.95999999999998,
+          "Top": 527.62,
+          "Right": 343.44,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 330.72,
+          "Top": 527.62,
+          "Right": 419.76000000000005,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 432.48,
+          "Top": 527.62,
+          "Right": 521.52,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 534.24,
+          "Top": 527.62,
+          "Right": 610.56,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 597.8399999999999,
+          "Top": 534.75,
+          "Right": 699.6,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 699.6,
+          "Top": 527.62,
+          "Right": 788.64,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 750.4799999999999,
+          "Top": 520.49,
+          "Right": 864.96,
+          "Bottom": 620.31
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.6917595446572411,
+        "PerTargetIou": [
+          0.6548111873305081,
+          0.6179689400422497,
+          0.6603430549552433,
+          0.6584670803673028,
+          0.7588741078407726,
+          0.6374539270471767,
+          0.7916400010520127,
+          0.6192191151652497,
+          0.6539386808792951,
+          0.619929229929604,
+          0.6964317645287854,
+          0.8341492739328576,
+          0.7254278968573041,
+          0.6896502121504615,
+          0.8224554287584431,
+          0.6273928136785891
+        ]
+      },
+      "Error": null,
+      "ReportedModel": "jev-1.14.0",
+      "MeanBoxConfidence": 0.8506250000000001
+    },
+    {
+      "Method": "bloons-template",
+      "Phase": "measured",
+      "Pair": 2,
+      "ElapsedMs": 56.4181,
+      "DetectorPerceptionMs": 36.7903,
+      "CandidateSetComplete": false,
+      "CandidateSetIssue": "The named Bloons TD Battles 2 layout did not fully match; 22/23 anchors passed. unsupported frame aspect ratio 1.784; expected visual anchor \u0027opponent-profile-banner\u0027 was missing (fraction=0.020, required=0.035)",
+      "Boxes": [
+        {
+          "Left": 177,
+          "Top": 407,
+          "Right": 254,
+          "Bottom": 507
+        },
+        {
+          "Left": 263,
+          "Top": 407,
+          "Right": 340,
+          "Bottom": 507
+        },
+        {
+          "Left": 350,
+          "Top": 407,
+          "Right": 427,
+          "Bottom": 507
+        },
+        {
+          "Left": 437,
+          "Top": 407,
+          "Right": 514,
+          "Bottom": 507
+        },
+        {
+          "Left": 524,
+          "Top": 407,
+          "Right": 601,
+          "Bottom": 507
+        },
+        {
+          "Left": 612,
+          "Top": 407,
+          "Right": 689,
+          "Bottom": 507
+        },
+        {
+          "Left": 699,
+          "Top": 407,
+          "Right": 776,
+          "Bottom": 507
+        },
+        {
+          "Left": 786,
+          "Top": 407,
+          "Right": 863,
+          "Bottom": 507
+        },
+        {
+          "Left": 177,
+          "Top": 519,
+          "Right": 254,
+          "Bottom": 615
+        },
+        {
+          "Left": 263,
+          "Top": 519,
+          "Right": 340,
+          "Bottom": 615
+        },
+        {
+          "Left": 350,
+          "Top": 519,
+          "Right": 427,
+          "Bottom": 615
+        },
+        {
+          "Left": 437,
+          "Top": 519,
+          "Right": 514,
+          "Bottom": 615
+        },
+        {
+          "Left": 524,
+          "Top": 519,
+          "Right": 601,
+          "Bottom": 615
+        },
+        {
+          "Left": 612,
+          "Top": 519,
+          "Right": 689,
+          "Bottom": 615
+        },
+        {
+          "Left": 699,
+          "Top": 519,
+          "Right": 776,
+          "Bottom": 615
+        },
+        {
+          "Left": 786,
+          "Top": 519,
+          "Right": 863,
+          "Bottom": 615
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.8143883943121817,
+        "PerTargetIou": [
+          0.7451923076923077,
+          0.7742830712303422,
+          0.8228120516499282,
+          0.8334329071573665,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8540357660705655,
+          0.7154340836012861,
+          0.7426981919332406,
+          0.7885536398467433,
+          0.7983494797273053,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8176982591876208
+        ]
+      },
+      "Error": null,
+      "ReportedModel": null,
+      "MeanBoxConfidence": null
+    },
+    {
+      "Method": "bloons-template",
+      "Phase": "measured",
+      "Pair": 3,
+      "ElapsedMs": 51.8262,
+      "DetectorPerceptionMs": 33.3229,
+      "CandidateSetComplete": false,
+      "CandidateSetIssue": "The named Bloons TD Battles 2 layout did not fully match; 22/23 anchors passed. unsupported frame aspect ratio 1.784; expected visual anchor \u0027opponent-profile-banner\u0027 was missing (fraction=0.020, required=0.035)",
+      "Boxes": [
+        {
+          "Left": 177,
+          "Top": 407,
+          "Right": 254,
+          "Bottom": 507
+        },
+        {
+          "Left": 263,
+          "Top": 407,
+          "Right": 340,
+          "Bottom": 507
+        },
+        {
+          "Left": 350,
+          "Top": 407,
+          "Right": 427,
+          "Bottom": 507
+        },
+        {
+          "Left": 437,
+          "Top": 407,
+          "Right": 514,
+          "Bottom": 507
+        },
+        {
+          "Left": 524,
+          "Top": 407,
+          "Right": 601,
+          "Bottom": 507
+        },
+        {
+          "Left": 612,
+          "Top": 407,
+          "Right": 689,
+          "Bottom": 507
+        },
+        {
+          "Left": 699,
+          "Top": 407,
+          "Right": 776,
+          "Bottom": 507
+        },
+        {
+          "Left": 786,
+          "Top": 407,
+          "Right": 863,
+          "Bottom": 507
+        },
+        {
+          "Left": 177,
+          "Top": 519,
+          "Right": 254,
+          "Bottom": 615
+        },
+        {
+          "Left": 263,
+          "Top": 519,
+          "Right": 340,
+          "Bottom": 615
+        },
+        {
+          "Left": 350,
+          "Top": 519,
+          "Right": 427,
+          "Bottom": 615
+        },
+        {
+          "Left": 437,
+          "Top": 519,
+          "Right": 514,
+          "Bottom": 615
+        },
+        {
+          "Left": 524,
+          "Top": 519,
+          "Right": 601,
+          "Bottom": 615
+        },
+        {
+          "Left": 612,
+          "Top": 519,
+          "Right": 689,
+          "Bottom": 615
+        },
+        {
+          "Left": 699,
+          "Top": 519,
+          "Right": 776,
+          "Bottom": 615
+        },
+        {
+          "Left": 786,
+          "Top": 519,
+          "Right": 863,
+          "Bottom": 615
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.8143883943121817,
+        "PerTargetIou": [
+          0.7451923076923077,
+          0.7742830712303422,
+          0.8228120516499282,
+          0.8334329071573665,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8540357660705655,
+          0.7154340836012861,
+          0.7426981919332406,
+          0.7885536398467433,
+          0.7983494797273053,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8176982591876208
+        ]
+      },
+      "Error": null,
+      "ReportedModel": null,
+      "MeanBoxConfidence": null
+    },
+    {
+      "Method": "jev-box",
+      "Phase": "measured",
+      "Pair": 3,
+      "ElapsedMs": 555.525,
+      "DetectorPerceptionMs": null,
+      "CandidateSetComplete": null,
+      "CandidateSetIssue": null,
+      "Boxes": [
+        {
+          "Left": 165.36,
+          "Top": 413.53999999999996,
+          "Right": 267.12,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 241.68,
+          "Top": 406.40999999999997,
+          "Right": 330.72,
+          "Bottom": 506.22999999999996
+        },
+        {
+          "Left": 330.72,
+          "Top": 413.53999999999996,
+          "Right": 419.76000000000005,
+          "Bottom": 513.36
+        },
+        {
+          "Left": 419.76000000000005,
+          "Top": 413.53999999999996,
+          "Right": 521.52,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 534.24,
+          "Top": 413.53999999999996,
+          "Right": 597.8399999999999,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 585.12,
+          "Top": 413.53999999999996,
+          "Right": 686.88,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 699.6,
+          "Top": 413.53999999999996,
+          "Right": 788.64,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 763.1999999999999,
+          "Top": 413.53999999999996,
+          "Right": 864.96,
+          "Bottom": 534.75
+        },
+        {
+          "Left": 165.36,
+          "Top": 527.62,
+          "Right": 267.12,
+          "Bottom": 606.05
+        },
+        {
+          "Left": 241.68,
+          "Top": 527.62,
+          "Right": 343.44,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 343.44,
+          "Top": 527.62,
+          "Right": 419.76000000000005,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 432.48,
+          "Top": 520.49,
+          "Right": 521.52,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 534.24,
+          "Top": 527.62,
+          "Right": 610.56,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 597.8399999999999,
+          "Top": 534.75,
+          "Right": 712.32,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 699.6,
+          "Top": 527.62,
+          "Right": 801.36,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 750.4799999999999,
+          "Top": 527.62,
+          "Right": 864.96,
+          "Bottom": 627.44
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.700693532655129,
+        "PerTargetIou": [
+          0.6933602077030057,
+          0.6985874083298647,
+          0.7664304313751932,
+          0.6584670803673028,
+          0.7588741078407726,
+          0.6704756436574832,
+          0.7424472640448326,
+          0.6192191151652497,
+          0.6365046998465458,
+          0.6896502121504623,
+          0.7929776927951029,
+          0.8016942143680492,
+          0.7254278968573041,
+          0.5823385428280036,
+          0.7245261438165916,
+          0.6501158613362994
+        ]
+      },
+      "Error": null,
+      "ReportedModel": "jev-1.14.0",
+      "MeanBoxConfidence": 0.86375
+    },
+    {
+      "Method": "jev-box",
+      "Phase": "measured",
+      "Pair": 4,
+      "ElapsedMs": 338.8685,
+      "DetectorPerceptionMs": null,
+      "CandidateSetComplete": null,
+      "CandidateSetIssue": null,
+      "Boxes": [
+        {
+          "Left": 165.36,
+          "Top": 413.53999999999996,
+          "Right": 267.12,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 241.68,
+          "Top": 406.40999999999997,
+          "Right": 330.72,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 318,
+          "Top": 413.53999999999996,
+          "Right": 419.76000000000005,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 432.48,
+          "Top": 413.53999999999996,
+          "Right": 521.52,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 534.24,
+          "Top": 413.53999999999996,
+          "Right": 597.8399999999999,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 585.12,
+          "Top": 413.53999999999996,
+          "Right": 686.88,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 699.6,
+          "Top": 413.53999999999996,
+          "Right": 788.64,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 763.1999999999999,
+          "Top": 413.53999999999996,
+          "Right": 864.96,
+          "Bottom": 534.75
+        },
+        {
+          "Left": 165.36,
+          "Top": 527.62,
+          "Right": 267.12,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 241.68,
+          "Top": 527.62,
+          "Right": 343.44,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 330.72,
+          "Top": 527.62,
+          "Right": 419.76000000000005,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 432.48,
+          "Top": 527.62,
+          "Right": 521.52,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 534.24,
+          "Top": 527.62,
+          "Right": 610.56,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 597.8399999999999,
+          "Top": 534.75,
+          "Right": 699.6,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 699.6,
+          "Top": 534.75,
+          "Right": 788.64,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 763.1999999999999,
+          "Top": 527.62,
+          "Right": 864.96,
+          "Bottom": 620.31
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.7069383820126092,
+        "PerTargetIou": [
+          0.6933602077030057,
+          0.6830363855457409,
+          0.6310856278640332,
+          0.7525338061340602,
+          0.7588741078407726,
+          0.6704756436574832,
+          0.7424472640448326,
+          0.6192191151652497,
+          0.6816848724672367,
+          0.6896502121504623,
+          0.6964317645287854,
+          0.7770409235405367,
+          0.7254278968573041,
+          0.6896502121504615,
+          0.7664822389989233,
+          0.7336138335528587
+        ]
+      },
+      "Error": null,
+      "ReportedModel": "jev-1.14.0",
+      "MeanBoxConfidence": 0.84875
+    },
+    {
+      "Method": "bloons-template",
+      "Phase": "measured",
+      "Pair": 4,
+      "ElapsedMs": 49.567,
+      "DetectorPerceptionMs": 30.8042,
+      "CandidateSetComplete": false,
+      "CandidateSetIssue": "The named Bloons TD Battles 2 layout did not fully match; 22/23 anchors passed. unsupported frame aspect ratio 1.784; expected visual anchor \u0027opponent-profile-banner\u0027 was missing (fraction=0.020, required=0.035)",
+      "Boxes": [
+        {
+          "Left": 177,
+          "Top": 407,
+          "Right": 254,
+          "Bottom": 507
+        },
+        {
+          "Left": 263,
+          "Top": 407,
+          "Right": 340,
+          "Bottom": 507
+        },
+        {
+          "Left": 350,
+          "Top": 407,
+          "Right": 427,
+          "Bottom": 507
+        },
+        {
+          "Left": 437,
+          "Top": 407,
+          "Right": 514,
+          "Bottom": 507
+        },
+        {
+          "Left": 524,
+          "Top": 407,
+          "Right": 601,
+          "Bottom": 507
+        },
+        {
+          "Left": 612,
+          "Top": 407,
+          "Right": 689,
+          "Bottom": 507
+        },
+        {
+          "Left": 699,
+          "Top": 407,
+          "Right": 776,
+          "Bottom": 507
+        },
+        {
+          "Left": 786,
+          "Top": 407,
+          "Right": 863,
+          "Bottom": 507
+        },
+        {
+          "Left": 177,
+          "Top": 519,
+          "Right": 254,
+          "Bottom": 615
+        },
+        {
+          "Left": 263,
+          "Top": 519,
+          "Right": 340,
+          "Bottom": 615
+        },
+        {
+          "Left": 350,
+          "Top": 519,
+          "Right": 427,
+          "Bottom": 615
+        },
+        {
+          "Left": 437,
+          "Top": 519,
+          "Right": 514,
+          "Bottom": 615
+        },
+        {
+          "Left": 524,
+          "Top": 519,
+          "Right": 601,
+          "Bottom": 615
+        },
+        {
+          "Left": 612,
+          "Top": 519,
+          "Right": 689,
+          "Bottom": 615
+        },
+        {
+          "Left": 699,
+          "Top": 519,
+          "Right": 776,
+          "Bottom": 615
+        },
+        {
+          "Left": 786,
+          "Top": 519,
+          "Right": 863,
+          "Bottom": 615
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.8143883943121817,
+        "PerTargetIou": [
+          0.7451923076923077,
+          0.7742830712303422,
+          0.8228120516499282,
+          0.8334329071573665,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8540357660705655,
+          0.7154340836012861,
+          0.7426981919332406,
+          0.7885536398467433,
+          0.7983494797273053,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8176982591876208
+        ]
+      },
+      "Error": null,
+      "ReportedModel": null,
+      "MeanBoxConfidence": null
+    },
+    {
+      "Method": "bloons-template",
+      "Phase": "measured",
+      "Pair": 5,
+      "ElapsedMs": 49.3496,
+      "DetectorPerceptionMs": 31.519,
+      "CandidateSetComplete": false,
+      "CandidateSetIssue": "The named Bloons TD Battles 2 layout did not fully match; 22/23 anchors passed. unsupported frame aspect ratio 1.784; expected visual anchor \u0027opponent-profile-banner\u0027 was missing (fraction=0.020, required=0.035)",
+      "Boxes": [
+        {
+          "Left": 177,
+          "Top": 407,
+          "Right": 254,
+          "Bottom": 507
+        },
+        {
+          "Left": 263,
+          "Top": 407,
+          "Right": 340,
+          "Bottom": 507
+        },
+        {
+          "Left": 350,
+          "Top": 407,
+          "Right": 427,
+          "Bottom": 507
+        },
+        {
+          "Left": 437,
+          "Top": 407,
+          "Right": 514,
+          "Bottom": 507
+        },
+        {
+          "Left": 524,
+          "Top": 407,
+          "Right": 601,
+          "Bottom": 507
+        },
+        {
+          "Left": 612,
+          "Top": 407,
+          "Right": 689,
+          "Bottom": 507
+        },
+        {
+          "Left": 699,
+          "Top": 407,
+          "Right": 776,
+          "Bottom": 507
+        },
+        {
+          "Left": 786,
+          "Top": 407,
+          "Right": 863,
+          "Bottom": 507
+        },
+        {
+          "Left": 177,
+          "Top": 519,
+          "Right": 254,
+          "Bottom": 615
+        },
+        {
+          "Left": 263,
+          "Top": 519,
+          "Right": 340,
+          "Bottom": 615
+        },
+        {
+          "Left": 350,
+          "Top": 519,
+          "Right": 427,
+          "Bottom": 615
+        },
+        {
+          "Left": 437,
+          "Top": 519,
+          "Right": 514,
+          "Bottom": 615
+        },
+        {
+          "Left": 524,
+          "Top": 519,
+          "Right": 601,
+          "Bottom": 615
+        },
+        {
+          "Left": 612,
+          "Top": 519,
+          "Right": 689,
+          "Bottom": 615
+        },
+        {
+          "Left": 699,
+          "Top": 519,
+          "Right": 776,
+          "Bottom": 615
+        },
+        {
+          "Left": 786,
+          "Top": 519,
+          "Right": 863,
+          "Bottom": 615
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.8143883943121817,
+        "PerTargetIou": [
+          0.7451923076923077,
+          0.7742830712303422,
+          0.8228120516499282,
+          0.8334329071573665,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8751069289991446,
+          0.8540357660705655,
+          0.7154340836012861,
+          0.7426981919332406,
+          0.7885536398467433,
+          0.7983494797273053,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8374679213002566,
+          0.8176982591876208
+        ]
+      },
+      "Error": null,
+      "ReportedModel": null,
+      "MeanBoxConfidence": null
+    },
+    {
+      "Method": "jev-box",
+      "Phase": "measured",
+      "Pair": 5,
+      "ElapsedMs": 588.9097,
+      "DetectorPerceptionMs": null,
+      "CandidateSetComplete": null,
+      "CandidateSetIssue": null,
+      "Boxes": [
+        {
+          "Left": 165.36,
+          "Top": 420.66999999999996,
+          "Right": 267.12,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 241.68,
+          "Top": 406.40999999999997,
+          "Right": 330.72,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 318,
+          "Top": 413.53999999999996,
+          "Right": 419.76000000000005,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 419.76000000000005,
+          "Top": 413.53999999999996,
+          "Right": 521.52,
+          "Bottom": 527.62
+        },
+        {
+          "Left": 521.52,
+          "Top": 413.53999999999996,
+          "Right": 597.8399999999999,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 585.12,
+          "Top": 420.66999999999996,
+          "Right": 686.88,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 699.6,
+          "Top": 413.53999999999996,
+          "Right": 788.64,
+          "Bottom": 520.49
+        },
+        {
+          "Left": 763.1999999999999,
+          "Top": 413.53999999999996,
+          "Right": 864.96,
+          "Bottom": 534.75
+        },
+        {
+          "Left": 165.36,
+          "Top": 520.49,
+          "Right": 267.12,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 241.68,
+          "Top": 527.62,
+          "Right": 343.44,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 330.72,
+          "Top": 520.49,
+          "Right": 419.76000000000005,
+          "Bottom": 613.18
+        },
+        {
+          "Left": 432.48,
+          "Top": 527.62,
+          "Right": 521.52,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 534.24,
+          "Top": 527.62,
+          "Right": 610.56,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 597.8399999999999,
+          "Top": 534.75,
+          "Right": 699.6,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 699.6,
+          "Top": 534.75,
+          "Right": 788.64,
+          "Bottom": 620.31
+        },
+        {
+          "Left": 763.1999999999999,
+          "Top": 520.49,
+          "Right": 864.96,
+          "Bottom": 620.31
+        }
+      ],
+      "Score": {
+        "Hits": 16,
+        "TargetCount": 16,
+        "PredictionCount": 16,
+        "FalsePositives": 0,
+        "FalseNegatives": 0,
+        "Precision": 1,
+        "Recall": 1,
+        "MeanIou": 0.7049597654629277,
+        "PerTargetIou": [
+          0.6590038384548155,
+          0.6830363855457409,
+          0.6310856278640332,
+          0.6584670803673028,
+          0.8657023096033748,
+          0.6374539270471767,
+          0.7916400010520127,
+          0.6192191151652497,
+          0.6539386808792951,
+          0.6896502121504623,
+          0.6708209967684944,
+          0.8341492739328576,
+          0.7254278968573041,
+          0.6896502121504615,
+          0.7664822389989233,
+          0.7036284505693386
+        ]
+      },
+      "Error": null,
+      "ReportedModel": "jev-1.14.0",
+      "MeanBoxConfidence": 0.855625
+    }
+  ],
+  "limitations": [
+    "This compares Jev Box with a DCU calibrated localization component on one frozen BTD2 hero-selection screen; it does not measure the full normal agent-driven DCU loop or the Hero Challenge action.",
+    "A speed improvement is not claimed unless all five pairs succeeded and Jev is faster without lower hit count or mean IoU.",
+    "No game capture, input, purchase, or matchmaking occurred."
+  ]
+}

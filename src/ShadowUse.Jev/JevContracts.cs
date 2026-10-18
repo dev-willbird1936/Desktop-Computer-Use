@@ -49,6 +49,8 @@ public sealed record JevElement(
 
 public sealed record JevControlOption(string Code, string Description);
 
+public sealed record JevBoxQuestion(string TargetVisibleQuestionId, string TargetDescription);
+
 public sealed record JevDecideRequest(
     string Goal,
     string ObservationId,
@@ -67,7 +69,9 @@ public sealed record JevDecideRequest(
     IReadOnlyList<string>? CandidateRoleFilter = null,
     bool AllowIncompleteCandidateSetForRecommendationOnly = false,
     bool AllowScoreDisambiguation = true,
-    int? MaxRetriesOverride = null);
+    int? MaxRetriesOverride = null,
+    IReadOnlyDictionary<string, object>? RequiredNoulQuestions = null,
+    IReadOnlyDictionary<string, JevBoxQuestion>? RequiredBoxQuestions = null);
 
 public sealed record JevDecision(
     string Operation,
@@ -85,13 +89,25 @@ public sealed record JevDecision(
     double? TopChoiceMargin = null,
     DateTimeOffset? ExpiresAtUtc = null,
     double? TargetConfidence = null,
-    IReadOnlyDictionary<string, double>? OperationProbabilities = null)
+    IReadOnlyDictionary<string, double>? OperationProbabilities = null,
+    IReadOnlyDictionary<string, double>? RequiredNoulProbabilities = null,
+    IReadOnlyDictionary<string, JevBoxDecision>? RequiredBoxDecisions = null)
 {
     /// <summary>True when this decision was computed against an observation the caller no longer holds current.</summary>
     public bool IsStaleAgainst(string currentObservationId) => !string.Equals(ObservationId, currentObservationId, StringComparison.Ordinal);
 
     public bool IsExpired(DateTimeOffset? now = null) => ExpiresAtUtc is { } expiry && expiry <= (now ?? DateTimeOffset.UtcNow);
 }
+
+public sealed record JevBoxDecision(
+    double TargetVisibleProbability,
+    double Confidence,
+    double Top,
+    double Bottom,
+    double Left,
+    double Right,
+    long LatencyMs,
+    string Model);
 
 public class JevDisabledException(string message) : InvalidOperationException(message);
 public class JevUnavailableException(string message, Exception? inner = null) : InvalidOperationException(message, inner);

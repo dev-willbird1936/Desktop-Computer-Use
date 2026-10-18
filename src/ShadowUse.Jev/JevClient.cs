@@ -19,7 +19,7 @@ internal sealed class JevClient(HttpClient httpClient, JevOptions options)
 {
     private static readonly JsonSerializerOptions WireJson = new() { WriteIndented = false };
 
-    public async Task<JevRawResponse> PostAsync(object requestBody, CancellationToken ct, int? maxRetriesOverride = null)
+    public async Task<JevRawResponse> PostAsync(object requestBody, CancellationToken ct, int? maxRetriesOverride = null, bool includeImages = false)
     {
         int maxRetries = maxRetriesOverride ?? options.MaxRetries;
         if (maxRetries is < 0 or > 10)
@@ -40,6 +40,8 @@ internal sealed class JevClient(HttpClient httpClient, JevOptions options)
                 Content = new StringContent(json, Encoding.UTF8, "application/json"),
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            if (includeImages)
+                request.Headers.TryAddWithoutValidation("TypeSafe-Danger-Zone-Images", "true");
 
             HttpResponseMessage response;
             try

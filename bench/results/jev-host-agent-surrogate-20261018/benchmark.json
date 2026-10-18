@@ -1,0 +1,949 @@
+{
+  "schema_version": 1,
+  "title": "Read-only host-agent surrogate localization timing on BTD2 frozen image",
+  "date": "2026-10-18",
+  "input": {
+    "path": "bench\\results\\jev-1.14-btdb2-hero-selection-20261015\\input-redacted.png",
+    "sha256": "218a6d734b0ca7ee4d3eb74eff9a872d5ff7ed7e17fcde269387fdf1d56f3063",
+    "dimensions": [
+      1272,
+      713
+    ],
+    "redacted": true
+  },
+  "task": "Return 16 individual hero card frame boxes; no hero-name recognition or action selection.",
+  "surrogate": {
+    "agent": "codex-advisor subagent",
+    "provider_model": "openai/gpt-6-luna",
+    "effort": "xhigh",
+    "context": "fresh isolated child; only the redacted image was read",
+    "timing_scope": "Parent subagent wall time includes child startup, file read, model work, output formatting and wrapper completion; not comparable to the Jev request timing boundary.",
+    "warmup": {
+      "timestamp": "2026-10-18T05:34:26.981Z",
+      "wall_ms": 60999
+    },
+    "measured_attempts": 5,
+    "acceptance_attested_attempts": 3,
+    "acceptance_rejected_attempts": 2,
+    "all_attempts_wall_ms": [
+      49484,
+      78671,
+      48080,
+      52493,
+      49312
+    ],
+    "all_attempts_median_wall_ms": 49484,
+    "all_attempts_range_wall_ms": [
+      48080,
+      78671
+    ],
+    "accepted_attempts_wall_ms": [
+      48080,
+      52493,
+      49312
+    ],
+    "accepted_attempts_median_wall_ms": 49312,
+    "accepted_attempts_range_wall_ms": [
+      48080,
+      52493
+    ],
+    "accepted_attempts_mean_iou": 0.945315,
+    "all_recovered_attempts_mean_iou_diagnostic_only": 0.9447,
+    "all_recovered_attempts_matched": [
+      16,
+      16,
+      16,
+      16,
+      16
+    ],
+    "runs": [
+      {
+        "timestamp": "2026-10-18T05:37:14.220Z",
+        "wall_ms": 49484,
+        "acceptance_status": "rejected",
+        "acceptance_error": "Structured acceptance report not found.",
+        "parent_output_state": "present",
+        "output_source": "parent-visible raw finalOutput",
+        "prediction_count": 16,
+        "matched_iou_ge_0_5": 16,
+        "mean_iou": 0.92954,
+        "predictions": [
+          {
+            "row": 1,
+            "column": 1,
+            "bbox": {
+              "x": 169,
+              "y": 415,
+              "width": 76,
+              "height": 96
+            }
+          },
+          {
+            "row": 1,
+            "column": 2,
+            "bbox": {
+              "x": 255,
+              "y": 402,
+              "width": 83,
+              "height": 106
+            }
+          },
+          {
+            "row": 1,
+            "column": 3,
+            "bbox": {
+              "x": 347,
+              "y": 415,
+              "width": 77,
+              "height": 96
+            }
+          },
+          {
+            "row": 1,
+            "column": 4,
+            "bbox": {
+              "x": 432,
+              "y": 415,
+              "width": 79,
+              "height": 96
+            }
+          },
+          {
+            "row": 1,
+            "column": 5,
+            "bbox": {
+              "x": 525,
+              "y": 415,
+              "width": 77,
+              "height": 96
+            }
+          },
+          {
+            "row": 1,
+            "column": 6,
+            "bbox": {
+              "x": 613,
+              "y": 415,
+              "width": 77,
+              "height": 96
+            }
+          },
+          {
+            "row": 1,
+            "column": 7,
+            "bbox": {
+              "x": 703,
+              "y": 415,
+              "width": 77,
+              "height": 96
+            }
+          },
+          {
+            "row": 1,
+            "column": 8,
+            "bbox": {
+              "x": 790,
+              "y": 415,
+              "width": 75,
+              "height": 96
+            }
+          },
+          {
+            "row": 2,
+            "column": 1,
+            "bbox": {
+              "x": 170,
+              "y": 525,
+              "width": 75,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 2,
+            "bbox": {
+              "x": 259,
+              "y": 525,
+              "width": 76,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 3,
+            "bbox": {
+              "x": 347,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 4,
+            "bbox": {
+              "x": 432,
+              "y": 525,
+              "width": 79,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 5,
+            "bbox": {
+              "x": 525,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 6,
+            "bbox": {
+              "x": 613,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 7,
+            "bbox": {
+              "x": 703,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 8,
+            "bbox": {
+              "x": 790,
+              "y": 525,
+              "width": 75,
+              "height": 97
+            }
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-18T05:39:11.550Z",
+        "wall_ms": 78671,
+        "acceptance_status": "rejected",
+        "acceptance_error": "Failed to parse acceptance-report: Invalid acceptance-report: cards: unsupported acceptance report field",
+        "parent_output_state": "absent",
+        "output_source": "recovered from child transcript after wrapper rejection",
+        "prediction_count": 16,
+        "matched_iou_ge_0_5": 16,
+        "mean_iou": 0.958016,
+        "predictions": [
+          {
+            "row": 1,
+            "column": 1,
+            "bbox": {
+              "x": 169,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 2,
+            "bbox": {
+              "x": 255,
+              "y": 402,
+              "width": 83,
+              "height": 109
+            }
+          },
+          {
+            "row": 1,
+            "column": 3,
+            "bbox": {
+              "x": 347,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 4,
+            "bbox": {
+              "x": 435,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 5,
+            "bbox": {
+              "x": 523,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 6,
+            "bbox": {
+              "x": 612,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 7,
+            "bbox": {
+              "x": 700,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 8,
+            "bbox": {
+              "x": 788,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 1,
+            "bbox": {
+              "x": 169,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 2,
+            "bbox": {
+              "x": 258,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 3,
+            "bbox": {
+              "x": 347,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 4,
+            "bbox": {
+              "x": 435,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 5,
+            "bbox": {
+              "x": 523,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 6,
+            "bbox": {
+              "x": 612,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 7,
+            "bbox": {
+              "x": 700,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 8,
+            "bbox": {
+              "x": 788,
+              "y": 525,
+              "width": 77,
+              "height": 97
+            }
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-18T05:48:17.349Z",
+        "wall_ms": 48080,
+        "acceptance_status": "attested",
+        "acceptance_error": null,
+        "parent_output_state": "absent",
+        "output_source": "attested acceptance-report manualNotes",
+        "prediction_count": 16,
+        "matched_iou_ge_0_5": 16,
+        "mean_iou": 0.945064,
+        "predictions": [
+          {
+            "row": 1,
+            "column": 1,
+            "bbox": {
+              "x": 169,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 2,
+            "bbox": {
+              "x": 254,
+              "y": 402,
+              "width": 84,
+              "height": 109
+            }
+          },
+          {
+            "row": 1,
+            "column": 3,
+            "bbox": {
+              "x": 347,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 4,
+            "bbox": {
+              "x": 435,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 5,
+            "bbox": {
+              "x": 524,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 6,
+            "bbox": {
+              "x": 613,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 7,
+            "bbox": {
+              "x": 701,
+              "y": 414,
+              "width": 77,
+              "height": 97
+            }
+          },
+          {
+            "row": 1,
+            "column": 8,
+            "bbox": {
+              "x": 789,
+              "y": 414,
+              "width": 76,
+              "height": 97
+            }
+          },
+          {
+            "row": 2,
+            "column": 1,
+            "bbox": {
+              "x": 169,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 2,
+            "bbox": {
+              "x": 258,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 3,
+            "bbox": {
+              "x": 347,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 4,
+            "bbox": {
+              "x": 435,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 5,
+            "bbox": {
+              "x": 524,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 6,
+            "bbox": {
+              "x": 613,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 7,
+            "bbox": {
+              "x": 701,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 8,
+            "bbox": {
+              "x": 789,
+              "y": 524,
+              "width": 76,
+              "height": 98
+            }
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-18T05:50:57.500Z",
+        "wall_ms": 52493,
+        "acceptance_status": "attested",
+        "acceptance_error": null,
+        "parent_output_state": "absent",
+        "output_source": "attested acceptance-report manualNotes",
+        "prediction_count": 16,
+        "matched_iou_ge_0_5": 16,
+        "mean_iou": 0.941841,
+        "predictions": [
+          {
+            "row": 1,
+            "column": 1,
+            "bbox": {
+              "x": 169,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 2,
+            "bbox": {
+              "x": 254,
+              "y": 402,
+              "width": 85,
+              "height": 110
+            }
+          },
+          {
+            "row": 1,
+            "column": 3,
+            "bbox": {
+              "x": 347,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 4,
+            "bbox": {
+              "x": 435,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 5,
+            "bbox": {
+              "x": 524,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 6,
+            "bbox": {
+              "x": 613,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 7,
+            "bbox": {
+              "x": 702,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 8,
+            "bbox": {
+              "x": 790,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 1,
+            "bbox": {
+              "x": 169,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 2,
+            "bbox": {
+              "x": 258,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 3,
+            "bbox": {
+              "x": 347,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 4,
+            "bbox": {
+              "x": 435,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 5,
+            "bbox": {
+              "x": 524,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 6,
+            "bbox": {
+              "x": 613,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 7,
+            "bbox": {
+              "x": 702,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 8,
+            "bbox": {
+              "x": 790,
+              "y": 524,
+              "width": 77,
+              "height": 98
+            }
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-18T05:52:36.526Z",
+        "wall_ms": 49312,
+        "acceptance_status": "attested",
+        "acceptance_error": null,
+        "parent_output_state": "absent",
+        "output_source": "attested acceptance-report manualNotes",
+        "prediction_count": 16,
+        "matched_iou_ge_0_5": 16,
+        "mean_iou": 0.94904,
+        "predictions": [
+          {
+            "row": 1,
+            "column": 1,
+            "bbox": {
+              "x": 169,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 2,
+            "bbox": {
+              "x": 254,
+              "y": 402,
+              "width": 84,
+              "height": 109
+            }
+          },
+          {
+            "row": 1,
+            "column": 3,
+            "bbox": {
+              "x": 347,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 4,
+            "bbox": {
+              "x": 434,
+              "y": 414,
+              "width": 78,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 5,
+            "bbox": {
+              "x": 524,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 6,
+            "bbox": {
+              "x": 613,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 7,
+            "bbox": {
+              "x": 702,
+              "y": 414,
+              "width": 77,
+              "height": 98
+            }
+          },
+          {
+            "row": 1,
+            "column": 8,
+            "bbox": {
+              "x": 790,
+              "y": 414,
+              "width": 76,
+              "height": 98
+            }
+          },
+          {
+            "row": 2,
+            "column": 1,
+            "bbox": {
+              "x": 169,
+              "y": 524,
+              "width": 77,
+              "height": 99
+            }
+          },
+          {
+            "row": 2,
+            "column": 2,
+            "bbox": {
+              "x": 257,
+              "y": 524,
+              "width": 78,
+              "height": 99
+            }
+          },
+          {
+            "row": 2,
+            "column": 3,
+            "bbox": {
+              "x": 347,
+              "y": 524,
+              "width": 77,
+              "height": 99
+            }
+          },
+          {
+            "row": 2,
+            "column": 4,
+            "bbox": {
+              "x": 435,
+              "y": 524,
+              "width": 78,
+              "height": 99
+            }
+          },
+          {
+            "row": 2,
+            "column": 5,
+            "bbox": {
+              "x": 524,
+              "y": 524,
+              "width": 77,
+              "height": 99
+            }
+          },
+          {
+            "row": 2,
+            "column": 6,
+            "bbox": {
+              "x": 613,
+              "y": 524,
+              "width": 77,
+              "height": 99
+            }
+          },
+          {
+            "row": 2,
+            "column": 7,
+            "bbox": {
+              "x": 702,
+              "y": 524,
+              "width": 77,
+              "height": 99
+            }
+          },
+          {
+            "row": 2,
+            "column": 8,
+            "bbox": {
+              "x": 790,
+              "y": 524,
+              "width": 76,
+              "height": 99
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "existing_frozen_image_component_comparison": {
+    "timing_contract": "Preloaded PNG bytes and fixed task specification to complete, parsed, normalized pixel-space box list. Local path includes PNG decode, production calibrated detector, card proposal filtering and normalization. Jev path includes Box-question construction, image base64 and JSON serialization, HTTP upload/network/full response, JSON parsing and box normalization. File I/O, process startup, overlays, logging and reference scoring are excluded. One unscored warm-up per path; five measured pairs in alternating order; HTTP client is reused; no answer cache or request retries.",
+    "local_median_ms": 49.567,
+    "local_range_ms": {
+      "min": 41.7502,
+      "max": 56.4181
+    },
+    "local_mean_iou": 0.8143883943121818,
+    "jev_median_ms": 553.752,
+    "jev_range_ms": {
+      "min": 338.8685,
+      "max": 588.9097
+    },
+    "jev_mean_iou": 0.7015890856071865,
+    "same_task_and_reference": true
+  },
+  "interpretation": {
+    "status": "exploratory surrogate; does not establish a normal-DCU speed win or goal completion",
+    "jev_vs_local_component": "Jev is slower and has lower mean IoU in the existing common-boundary component benchmark.",
+    "jev_vs_host_agent_surrogate": "The raw median latency ratio favors Jev, but timing scopes differ and two of five host-agent responses were rejected by the acceptance wrapper. The surrogate task was localization; the OpenAI Responses backend selects caller-listed operations and target IDs, not boxes. Accepted outputs have higher mean IoU than Jev; this is not an apples-to-apples end-to-end DCU comparison.",
+    "live_game": "No game input was sent for this benchmark. The BTD2 Hero Challenge remains blocked by the existing fail-closed stability guard."
+  }
+}

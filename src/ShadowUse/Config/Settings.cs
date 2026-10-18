@@ -30,10 +30,10 @@ public sealed class ShadowSettings
     /// <summary>Extra delay (ms) after each action before the follow-up snapshot.</summary>
     public int PostActionDelayMs { get; set; } = 150;
 
-    /// <summary>Jev mode: "off" (default), "assist", or "fast_loop". Never a permission gate — only a decision-speed path.</summary>
+    /// <summary>Jev mode: "off" (default), "assist", or "fast_loop". A decision-mode setting, not sufficient authorization for experimental game input.</summary>
     public string JevMode { get; set; } = "off";
 
-    /// <summary>Decision backend for native, browser, and game JEV tools: "jev" (text-only) or "openai" (Responses API with optional image input).</summary>
+    /// <summary>Decision backend for native, browser, and game Jev tools: "jev" (TypeSafe Choice/Noul; experimental game actions may use image+Box) or "openai" (Responses API with optional image input).</summary>
     public string DecisionBackend { get; set; } = "jev";
 
     /// <summary>OpenAI Responses model. The API key is read from OPENAI_API_KEY and is never stored in settings.</summary>
@@ -50,6 +50,18 @@ public sealed class ShadowSettings
 
     /// <summary>Per-call Jev timeout in milliseconds.</summary>
     public int JevTimeoutMs { get; set; } = 8_000;
+
+    /// <summary>Experimental game image+Box action coordinator. Off by default; only enable in an isolated experimental MCP instance.</summary>
+    public bool EnableExperimentalGameJevAct { get; set; } = false;
+
+    /// <summary>Minimum Choice/operation/target/applicability score for experimental game Jev actions (0-1; 0 disables this minimum).</summary>
+    public double ExperimentalGameJevActChoiceThreshold { get; set; } = 0.85;
+
+    /// <summary>Minimum target-presence Noul and Box confidence for experimental click actions (0-1; 0 disables this minimum).</summary>
+    public double ExperimentalGameJevActClickThreshold { get; set; } = 0.90;
+
+    /// <summary>Refuse top-two scores closer than this margin (0-1; 0 disables the ambiguity-margin check).</summary>
+    public double ExperimentalGameJevActAmbiguityMargin { get; set; } = 0.10;
 
     /// <summary>Optional local detector Python executable; requires torch, torchvision, numpy and Pillow.</summary>
     public string? LocalUiYoloPythonExecutable { get; set; }
@@ -180,6 +192,9 @@ public sealed class ShadowSettings
         HumanizedMouseSpeed = double.IsFinite(HumanizedMouseSpeed) ? Math.Clamp(HumanizedMouseSpeed, 0.25, 4) : 1.0;
         HumanizedTypingSpeed = double.IsFinite(HumanizedTypingSpeed) ? Math.Clamp(HumanizedTypingSpeed, 0.25, 4) : 1.0;
         HumanizedTypoRate = double.IsFinite(HumanizedTypoRate) ? Math.Clamp(HumanizedTypoRate, 0, 0.2) : 0.015;
+        ExperimentalGameJevActChoiceThreshold = double.IsFinite(ExperimentalGameJevActChoiceThreshold) ? Math.Clamp(ExperimentalGameJevActChoiceThreshold, 0, 1) : 0.85;
+        ExperimentalGameJevActClickThreshold = double.IsFinite(ExperimentalGameJevActClickThreshold) ? Math.Clamp(ExperimentalGameJevActClickThreshold, 0, 1) : 0.90;
+        ExperimentalGameJevActAmbiguityMargin = double.IsFinite(ExperimentalGameJevActAmbiguityMargin) ? Math.Clamp(ExperimentalGameJevActAmbiguityMargin, 0, 1) : 0.10;
         HardwareBaudRate = Math.Clamp(HardwareBaudRate, 9600, 2_000_000);
         MemoryWriteTargetPid = Math.Max(0, MemoryWriteTargetPid);
     }

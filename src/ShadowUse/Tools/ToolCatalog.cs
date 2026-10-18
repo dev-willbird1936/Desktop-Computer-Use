@@ -75,6 +75,7 @@ public static class ToolCatalog
         (new("image.observe", ReadOnly: true), ["ui_candidates_detect_image"]),
         (new("game.observe", ReadOnly: true, Game: true), ["game_screenshot", "game_ocr", "game_bars", "game_wait", "game_input_ownership"]),
         (new("game.jev", ReadOnly: true, OpenWorld: true, Game: true), ["game_jev_decide", "game_jev_decide_candidates", "game_jev_decide_known_state"]),
+        (new("game.jev", Destructive: true, OpenWorld: true, Game: true), ["game_jev_act"]),
         (new("memory.app_actions"), ["app_action_catalog_import", "screen_transition_report"]),
         (new("memory.app_actions", ReadOnly: true), ["app_action_catalog_get", "screen_state_get"]),
         (new("memory.app_actions", Destructive: true), ["app_action_catalog_invalidate", "screen_state_invalidate"]),

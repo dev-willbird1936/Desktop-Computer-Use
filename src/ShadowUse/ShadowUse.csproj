@@ -33,6 +33,7 @@
 
   <ItemGroup>
     <AssemblyMetadata Include="BuildTimestampUtc" Value="$(BuildTimestampUtc)" />
+    <InternalsVisibleTo Include="ShadowUse.Tests" />
     <Content Include="..\..\tools\ui_candidate_detect.py" Link="tools\ui_candidate_detect.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

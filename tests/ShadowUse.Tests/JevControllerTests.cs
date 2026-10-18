@@ -565,4 +565,340 @@ public sealed class JevControllerTests
             Environment.SetEnvironmentVariable(envVar, null);
         }
     }
+
+    [Fact]
+    public async Task ImageDecision_SendsSameAssetReferenceWithSafetyHeader_AndRedactsDiagnosticJson()
+    {
+        const string response = """
+            { "model": "jev-1.14.0", "answers": {
+              "operation": { "type": "choice", "choice": "CLICK", "confidence": 0.96, "probabilities": { "CLICK": 0.96, "WAIT": 0.04 } },
+              "click_target": { "type": "choice", "choice": "1", "confidence": 0.97, "probabilities": { "1": 1.0 } },
+              "action_applicable_01": { "type": "noul", "noul": 0.98 }
+            } }
+            """;
+        var envVar = "JEV_TEST_KEY_" + nameof(ImageDecision_SendsSameAssetReferenceWithSafetyHeader_AndRedactsDiagnosticJson);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        byte[] jpeg = [0xff, 0xd8, 0x13, 0x37];
+        string? sentBody = null;
+        var handler = new FakeHandler
+        {
+            Respond = request =>
+            {
+                Assert.True(request.Headers.TryGetValues("TypeSafe-Danger-Zone-Images", out var values));
+                Assert.Equal("true", Assert.Single(values!));
+                sentBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return Json(HttpStatusCode.OK, response);
+            },
+        };
+        var controller = new JevController(new HttpClient(handler), new JevOptions
+        {
+            Mode = JevMode.FastLoop,
+            Model = "jev-1.14.0",
+            ApiKeyEnvironmentVariable = envVar,
+        });
+        var requestData = new JevDecideRequest("start solo", "frame-1",
+            [new JevElement("start", "game_action", "Start solo", null, null, ["CLICK"])],
+            new Dictionary<string, string> { ["CLICK"] = "Click the listed visual control." },
+            [new JevControlOption("WAIT", "Do not act now.")],
+            AskGoalReached: false,
+            ExpiresAtUtc: DateTimeOffset.UtcNow.AddSeconds(4),
+            AllowScoreDisambiguation: false,
+            MaxRetriesOverride: 0,
+            RequiredNoulQuestions: new Dictionary<string, object> { ["action_applicable_01"] = new { question = "Is this action applicable?" } });
+
+        try
+        {
+            var decision = await controller.DecideWithImageAsync(requestData, jpeg);
+
+            Assert.True(controller.SupportsBox);
+            Assert.Equal("CLICK", decision.Operation);
+            Assert.Equal("start", decision.TargetElementId);
+            Assert.Equal(0.98, decision.RequiredNoulProbabilities!["action_applicable_01"], 3);
+            Assert.DoesNotContain(Convert.ToBase64String(jpeg), decision.RequestJson);
+            using var diagnostic = System.Text.Json.JsonDocument.Parse(decision.RequestJson);
+            var diagnosticAsset = diagnostic.RootElement.GetProperty("assets").EnumerateObject().Single().Value;
+            Assert.Equal("<redacted>", diagnosticAsset.GetProperty("data_base64").GetString());
+            using var body = System.Text.Json.JsonDocument.Parse(sentBody!);
+            var imageReference = body.RootElement.GetProperty("state").GetProperty("screenshot").GetString();
+            var asset = body.RootElement.GetProperty("assets").GetProperty(imageReference!);
+            Assert.Equal(Convert.ToBase64String(jpeg), asset.GetProperty("data_base64").GetString());
+            Assert.Equal("jpg", asset.GetProperty("format").GetString());
+            Assert.Equal("noul", body.RootElement.GetProperty("questions").GetProperty("action_applicable_01").GetProperty("type").GetString());
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
+    }
+
+    [Fact]
+    public async Task RequiredNoulAnswerMissingOrWrongType_FailsClosed()
+    {
+        const string response = """
+            { "answers": {
+              "operation": { "choice": "CLICK", "confidence": 0.96, "probabilities": { "CLICK": 0.96, "WAIT": 0.04 } },
+              "click_target": { "choice": "1", "confidence": 0.97, "probabilities": { "1": 1.0 } },
+              "action_applicable_01": { "confidence": 0.98, "noul": 0.99 }
+            } }
+            """;
+        var envVar = "JEV_TEST_KEY_" + nameof(RequiredNoulAnswerMissingOrWrongType_FailsClosed);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler { Respond = _ => Json(HttpStatusCode.OK, response) };
+        var controller = new JevController(new HttpClient(handler), new JevOptions { Mode = JevMode.Assist, ApiKeyEnvironmentVariable = envVar, MaxRetries = 0 });
+        var requestData = new JevDecideRequest("goal", "frame-1",
+            [new JevElement("action", "game_action", "Action", null, null, ["CLICK"])],
+            new Dictionary<string, string> { ["CLICK"] = "Click." },
+            [new JevControlOption("WAIT", "Wait.")], AskGoalReached: false,
+            RequiredNoulQuestions: new Dictionary<string, object> { ["action_applicable_01"] = new { question = "Is it applicable?" } });
+        try
+        {
+            await Assert.ThrowsAsync<JevValidationException>(() => controller.DecideAsync(requestData));
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
+    }
+
+    [Fact]
+    public async Task ImageDecision_RejectsUntypedChoiceAnswer()
+    {
+        const string response = """
+            { "model": "jev-1.14.0", "answers": {
+              "operation": { "type": "noul", "choice": "CLICK", "confidence": 0.96, "probabilities": { "CLICK": 0.96, "WAIT": 0.04 } },
+              "click_target": { "type": "choice", "choice": "1", "confidence": 0.97, "probabilities": { "1": 1.0 } },
+              "action_applicable_01": { "type": "noul", "noul": 0.98 }
+            } }
+            """;
+        var envVar = "JEV_TEST_KEY_" + nameof(ImageDecision_RejectsUntypedChoiceAnswer);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler { Respond = _ => Json(HttpStatusCode.OK, response) };
+        var controller = new JevController(new HttpClient(handler), new JevOptions
+        {
+            Mode = JevMode.FastLoop,
+            Model = "jev-1.14.0",
+            ApiKeyEnvironmentVariable = envVar,
+            MaxRetries = 0,
+        });
+        var request = new JevDecideRequest("goal", "frame", [new JevElement("action", "button", "Action", null, null, ["CLICK"])],
+            new Dictionary<string, string> { ["CLICK"] = "Click" }, [new JevControlOption("WAIT", "Wait")],
+            AskGoalReached: false, RequiredNoulQuestions: new Dictionary<string, object> { ["action_applicable_01"] = new { question = "Applicable?" } });
+        try
+        {
+            await Assert.ThrowsAsync<JevValidationException>(() => controller.DecideWithImageAsync(request, new byte[] { 1 }));
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally { Environment.SetEnvironmentVariable(envVar, null); }
+    }
+
+    [Fact]
+    public async Task ImageDecision_RejectsDuplicateSafetyProperties()
+    {
+        const string response = """
+            { "model": "jev-1.14.0", "answers": {
+              "operation": { "type": "choice", "choice": "CLICK", "confidence": 0.96, "confidence": 0.99, "probabilities": { "CLICK": 0.96, "WAIT": 0.04 } },
+              "click_target": { "type": "choice", "choice": "1", "confidence": 0.97, "probabilities": { "1": 1.0 } },
+              "action_applicable_01": { "type": "noul", "noul": 0.98 }
+            } }
+            """;
+        var envVar = "JEV_TEST_KEY_" + nameof(ImageDecision_RejectsDuplicateSafetyProperties);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler { Respond = _ => Json(HttpStatusCode.OK, response) };
+        var controller = new JevController(new HttpClient(handler), new JevOptions
+        {
+            Mode = JevMode.FastLoop,
+            Model = "jev-1.14.0",
+            ApiKeyEnvironmentVariable = envVar,
+            MaxRetries = 0,
+        });
+        var request = new JevDecideRequest("goal", "frame", [new JevElement("action", "button", "Action", null, null, ["CLICK"])],
+            new Dictionary<string, string> { ["CLICK"] = "Click" }, [new JevControlOption("WAIT", "Wait")],
+            AskGoalReached: false, RequiredNoulQuestions: new Dictionary<string, object> { ["action_applicable_01"] = new { question = "Applicable?" } });
+        try
+        {
+            await Assert.ThrowsAsync<JevValidationException>(() => controller.DecideWithImageAsync(request, new byte[] { 1 }));
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally { Environment.SetEnvironmentVariable(envVar, null); }
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("wrong_type")]
+    [InlineData("mismatch")]
+    public async Task LocateBoxAsync_RequiresExplicitMatchingResponseModel(string modelCase)
+    {
+        string modelField = modelCase switch
+        {
+            "missing" => "",
+            "wrong_type" => "\"model\":42,",
+            _ => "\"model\":\"jev-preview\",",
+        };
+        string response = $$"""
+            { {{modelField}} "answers": {
+              "target_visible": { "type": "noul", "noul": 0.97 },
+              "target_box": { "type": "box", "confidence": 0.96, "box": { "top": 0.1, "bottom": 0.4, "left": 0.2, "right": 0.5 } }
+            } }
+            """;
+        var envVar = "JEV_TEST_KEY_" + nameof(LocateBoxAsync_RequiresExplicitMatchingResponseModel) + Guid.NewGuid().ToString("N");
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler { Respond = _ => Json(HttpStatusCode.OK, response) };
+        var controller = new JevController(new HttpClient(handler), new JevOptions
+        {
+            Mode = JevMode.Assist,
+            Model = "jev-1.14.0",
+            ApiKeyEnvironmentVariable = envVar,
+            MaxRetries = 0,
+        });
+        try
+        {
+            await Assert.ThrowsAsync<JevValidationException>(() => controller.LocateBoxAsync("frame", "goal", "button", new byte[] { 1 }));
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally { Environment.SetEnvironmentVariable(envVar, null); }
+    }
+
+    [Fact]
+    public async Task LocateBoxAsync_RejectsDuplicateBoxProperties()
+    {
+        const string response = """
+            { "model": "jev-1.14.0", "answers": {
+              "target_visible": { "type": "noul", "noul": 0.97 },
+              "target_box": { "type": "box", "confidence": 0.96, "confidence": 0.99, "box": { "top": 0.1, "bottom": 0.4, "left": 0.2, "right": 0.5 } }
+            } }
+            """;
+        var envVar = "JEV_TEST_KEY_" + nameof(LocateBoxAsync_RejectsDuplicateBoxProperties);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        var handler = new FakeHandler { Respond = _ => Json(HttpStatusCode.OK, response) };
+        var controller = new JevController(new HttpClient(handler), new JevOptions
+        {
+            Mode = JevMode.Assist,
+            Model = "jev-1.14.0",
+            ApiKeyEnvironmentVariable = envVar,
+            MaxRetries = 0,
+        });
+        try
+        {
+            await Assert.ThrowsAsync<JevValidationException>(() => controller.LocateBoxAsync("frame", "goal", "button", new byte[] { 1 }));
+            Assert.Equal(1, handler.CallCount);
+        }
+        finally { Environment.SetEnvironmentVariable(envVar, null); }
+    }
+
+    [Fact]
+    public async Task LocateBoxAsync_SendsImageAndRejectsInvalidGeometry()
+    {
+        const string response = """
+            { "model": "jev-1.14.0", "answers": {
+              "target_visible": { "type": "noul", "noul": 0.97 },
+              "target_box": { "type": "box", "confidence": 0.96, "box": { "top": 0.1, "bottom": 0.4, "left": 0.2, "right": 0.5 } }
+            } }
+            """;
+        var envVar = "JEV_TEST_KEY_" + nameof(LocateBoxAsync_SendsImageAndRejectsInvalidGeometry);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        byte[] jpeg = [0xff, 0xd8, 0xaa];
+        string? sentBody = null;
+        var handler = new FakeHandler
+        {
+            Respond = request =>
+            {
+                Assert.True(request.Headers.TryGetValues("TypeSafe-Danger-Zone-Images", out var values));
+                Assert.Equal("true", Assert.Single(values!));
+                sentBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return Json(HttpStatusCode.OK, response);
+            },
+        };
+        var controller = new JevController(new HttpClient(handler), new JevOptions
+        {
+            Mode = JevMode.Assist,
+            Model = "jev-1.14.0",
+            ApiKeyEnvironmentVariable = envVar,
+        });
+        try
+        {
+            var box = await controller.LocateBoxAsync("frame-2", "start solo", "the Start Solo button", jpeg);
+            Assert.Equal(0.97, box.TargetVisibleProbability, 3);
+            Assert.Equal(0.96, box.Confidence, 3);
+            Assert.Equal(0.1, box.Top, 3);
+            using var body = System.Text.Json.JsonDocument.Parse(sentBody!);
+            var imageReference = body.RootElement.GetProperty("state").GetProperty("screenshot").GetString();
+            Assert.Equal(Convert.ToBase64String(jpeg), body.RootElement.GetProperty("assets").GetProperty(imageReference!).GetProperty("data_base64").GetString());
+
+            handler.Respond = _ => Json(HttpStatusCode.OK, response.Replace("\"right\": 0.5", "\"right\": 1.5", StringComparison.Ordinal));
+            await Assert.ThrowsAsync<JevValidationException>(() => controller.LocateBoxAsync("frame-2", "start solo", "the Start Solo button", jpeg));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
+    }
+
+    [Fact]
+    public async Task ChoiceNoulAndBoxQuestionsShareOneImageRequest()
+    {
+        const string response = """
+            { "model": "jev-1.14.0", "answers": {
+              "operation": { "type": "choice", "choice": "click", "confidence": 0.97, "probabilities": { "click": 0.95, "WAIT": 0.03, "DONE": 0.01, "BLOCKED": 0.01 } },
+              "click_target": { "type": "choice", "choice": "2", "confidence": 0.98, "probabilities": { "1": 0.02, "2": 0.98 } },
+              "visible": { "type": "noul", "noul": 0.96 },
+              "button_box": { "type": "box", "confidence": 0.93, "box": { "top": 0.2, "bottom": 0.4, "left": 0.3, "right": 0.6 } }
+            } }
+            """;
+        string envVar = "JEV_TEST_KEY_" + nameof(ChoiceNoulAndBoxQuestionsShareOneImageRequest);
+        Environment.SetEnvironmentVariable(envVar, "test-key");
+        string? sentBody = null;
+        int requestCount = 0;
+        var handler = new FakeHandler
+        {
+            Respond = request =>
+            {
+                requestCount++;
+                Assert.True(request.Headers.TryGetValues("TypeSafe-Danger-Zone-Images", out var values));
+                Assert.Equal("true", Assert.Single(values!));
+                sentBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return Json(HttpStatusCode.OK, response);
+            },
+        };
+        var controller = new JevController(new HttpClient(handler), new JevOptions
+        {
+            Mode = JevMode.FastLoop,
+            Model = "jev-1.14.0",
+            ApiKeyEnvironmentVariable = envVar,
+            MaxRetries = 0,
+        });
+        var request = BasicRequest("frame-1") with
+        {
+            RequiredNoulQuestions = new Dictionary<string, object>
+            {
+                ["visible"] = new { question = "Is the exact button visible in screenshot?" },
+            },
+            RequiredBoxQuestions = new Dictionary<string, JevBoxQuestion>
+            {
+                ["button_box"] = new("visible", "Bloon Lab button"),
+            },
+        };
+        byte[] jpeg = [0xff, 0xd8, 0x01, 0x02];
+        try
+        {
+            var decision = await controller.DecideWithImageAsync(request, jpeg);
+
+            Assert.Equal(1, requestCount);
+            Assert.Equal("e2", decision.TargetElementId);
+            Assert.True(decision.RequiredBoxDecisions!.TryGetValue("button_box", out var box));
+            Assert.Equal(0.96, box!.TargetVisibleProbability, 3);
+            Assert.Equal(0.93, box.Confidence, 3);
+            Assert.Equal("jev-1.14.0", box.Model);
+            using var body = System.Text.Json.JsonDocument.Parse(sentBody!);
+            var root = body.RootElement;
+            var state = root.GetProperty("state");
+            var imageReference = state.GetProperty("screenshot").GetString()!;
+            Assert.Equal(Convert.ToBase64String(jpeg), root.GetProperty("assets").GetProperty(imageReference).GetProperty("data_base64").GetString());
+            Assert.Equal("choice", root.GetProperty("questions").GetProperty("operation").GetProperty("type").GetString());
+            Assert.Equal("noul", root.GetProperty("questions").GetProperty("visible").GetProperty("type").GetString());
+            Assert.Equal("box", root.GetProperty("questions").GetProperty("button_box").GetProperty("type").GetString());
+        }
+        finally { Environment.SetEnvironmentVariable(envVar, null); }
+    }
 }

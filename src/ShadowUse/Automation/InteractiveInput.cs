@@ -52,12 +52,39 @@ public static partial class InteractiveInput
     public static Task<InputResult> ClickAsync(IntPtr hwnd, int x, int y, MouseButton button, int clickCount, CancellationToken ct)
         => RunAsync(hwnd, "sendinput_click", ct, () =>
         {
-            var (down, up) = ButtonFlags(button);
+            var root = GetAncestor(hwnd, GA_ROOT);
+            uint down = ButtonFlags(button).Down;
+            int buttonVk = button switch { MouseButton.Right => VkRButton, MouseButton.Middle => VkMButton, _ => VkLButton };
+            ct.ThrowIfCancellationRequested();
             MoveTo(x, y);
             Thread.Sleep(InputPace.Ms(30)); // hover: lets placement previews and hover states follow the cursor
             for (int i = 0; i < clickCount; i++)
             {
-                if (!Send(Mouse(x, y, down)) || !Send(Mouse(x, y, up))) return "SendInput rejected the click";
+                // Task.Run cancellation does not interrupt a running SendInput delegate; recheck at the final boundary.
+                ct.ThrowIfCancellationRequested();
+                var foreground = ForegroundWindowProvider();
+                if (foreground == IntPtr.Zero || GetAncestor(foreground, GA_ROOT) != root) return ForegroundLost;
+                if (CursorPosition() is not { } settledCursor
+                    || Math.Abs((long)settledCursor.X - x) > 2 || Math.Abs((long)settledCursor.Y - y) > 2)
+                    return "cursor_did_not_reach_click_target";
+                bool pressed = false;
+                string? clickError = null, releaseError = null;
+                try
+                {
+                    if (!Send(Pure(down))) clickError = "SendInput rejected the button press";
+                    else
+                    {
+                        pressed = true;
+                        releaseError = ReleaseInputWithRecovery(buttonVk, hwnd, IntPtr.Zero);
+                        pressed = false;
+                    }
+                }
+                finally
+                {
+                    if (pressed) releaseError ??= ReleaseInputWithRecovery(buttonVk, hwnd, IntPtr.Zero);
+                }
+                if (releaseError is not null) return releaseError;
+                if (clickError is not null) return clickError;
                 if (i + 1 < clickCount) Thread.Sleep(InputPace.Ms(60));
             }
             return null;
@@ -125,8 +152,13 @@ public static partial class InteractiveInput
     /// cursor back (a mouse-look game would turn that jump into camera motion).</summary>
     public static bool GameProfile { get; set; }
 
-    public static (int X, int Y)? CursorPosition()
-        => GetCursorPos(out var p) ? (p.X, p.Y) : null;
+    private static (int X, int Y)? ReadNativeCursorPosition()
+        => GetCursorPos(out var point) ? (point.X, point.Y) : null;
+
+    /// <summary>Current screen cursor position. Tests can replace the native reader to model clipping.</summary>
+    public static Func<(int X, int Y)?> CursorPositionProvider { get; set; } = ReadNativeCursorPosition;
+
+    public static (int X, int Y)? CursorPosition() => CursorPositionProvider();
 
     /// <summary>Cross-process one-controller-per-window lease. Claimed before activation or real input while <see cref="GameProfile"/> is on.</summary>
     public static GameInputOwnership Ownership { get; set; } = new(GameInputOwnership.DefaultLeaseDirectory(), heldInputCount: HeldInputCountForRoot);
@@ -263,24 +295,24 @@ public static partial class InteractiveInput
         {
             var mi = input.u.mi;
             uint flags = mi.dwFlags;
-            // Mouse move (absolute or relative)
+            bool moved = false;
             if ((flags & MOUSEEVENTF_MOVE) != 0)
             {
+                InputResult moveResult;
                 if ((flags & MOUSEEVENTF_ABSOLUTE) != 0)
                 {
                     int left = GetSystemMetrics(SM_XVIRTUALSCREEN), top = GetSystemMetrics(SM_YVIRTUALSCREEN);
                     int width = Math.Max(2, GetSystemMetrics(SM_CXVIRTUALSCREEN)), height = Math.Max(2, GetSystemMetrics(SM_CYVIRTUALSCREEN));
                     int x = (int)Math.Round(mi.dx * (width - 1) / 65535.0 + left);
                     int y = (int)Math.Round(mi.dy * (height - 1) / 65535.0 + top);
-                    return backend.MoveTo(x, y);
+                    moveResult = backend.MoveTo(x, y);
                 }
                 else
-                {
-                    // Relative move — use the backend's MoveRelative
-                    return backend.MoveRelative(mi.dx, mi.dy);
-                }
+                    moveResult = backend.MoveRelative(mi.dx, mi.dy);
+                if (!moveResult.Success) return moveResult;
+                moved = true;
             }
-            // Button press/release
+            // A SendInput mouse packet may combine absolute movement with a button or wheel event.
             if ((flags & (MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP | MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP |
                         MOUSEEVENTF_MIDDLEDOWN | MOUSEEVENTF_MIDDLEUP)) != 0)
             {
@@ -290,11 +322,9 @@ public static partial class InteractiveInput
                 bool down = (flags & (MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_MIDDLEDOWN)) != 0;
                 return backend.SetButton(btn, down);
             }
-            // Wheel
             if ((flags & (MOUSEEVENTF_WHEEL | MOUSEEVENTF_HWHEEL)) != 0)
-            {
                 return backend.Wheel((int)mi.mouseData, (flags & MOUSEEVENTF_HWHEEL) != 0);
-            }
+            if (moved) return new InputResult(true, backend.Name, "");
         }
         else if (type == INPUT_KEYBOARD)
         {

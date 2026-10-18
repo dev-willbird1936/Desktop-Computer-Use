@@ -76,6 +76,73 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
     private static CallToolResult Fail(string message, string? usage = null)
         => Reply(new { ok = false, error = message, usage }, isError: true);
 
+    internal static CallToolResult? ValidateSourceFrameStability(string sourceFrameId, string? validationFrameId,
+        long? sourceFrameAgeMs, CameraMotion? motion, IReadOnlyList<Rectangle>? regions, bool comparisonAttempted,
+        bool regionsStable, IReadOnlyList<FrameRegionDifference> differences)
+    {
+        bool regionsProvided = regions is { Count: > 0 };
+        string? error = motion is not { Available: true }
+            ? "Current frame stability could not be verified against source_frame_id; reobserve before dispatch."
+            : motion.Moved
+                ? "The game view moved since source_frame_id; rediscover and decide again before dispatch."
+                : regionsProvided && (!comparisonAttempted || !regionsStable)
+                    ? "A caller-approved static-menu target or context region changed, or its pixels could not be compared; reobserve before dispatch."
+                    : !GameFrameStabilityPolicy.AllowsDispatch(motion, regionsProvided, comparisonAttempted, regionsStable)
+                        ? "The frame has an unclassified whole-screen change since source_frame_id; reobserve before dispatch."
+                        : null;
+        if (error is null) return null;
+
+        bool motionAvailable = motion is { Available: true };
+        var diagnostics = regionsProvided ? FrameRegionStability.Describe(regions!, differences, comparisonAttempted) : [];
+        return Reply(new
+        {
+            ok = false,
+            error,
+            source_frame_id = sourceFrameId,
+            validation_frame_id = validationFrameId,
+            source_frame_age_ms = sourceFrameAgeMs,
+            input_sent = false,
+            no_input_sent = true,
+            dispatch_attempted = false,
+            do_not_retry = true,
+            reobserve = true,
+            motion = new
+            {
+                available = motionAvailable,
+                moved = motionAvailable ? motion!.Moved : (bool?)null,
+                unclassified = motionAvailable ? motion!.Unclassified : (bool?)null,
+            },
+            source_frame_stability = new
+            {
+                mode = regionsProvided ? "caller_approved_static_menu_regions" : "whole_frame",
+                motion_available = motionAvailable,
+                whole_frame_moved = motionAvailable ? motion!.Moved : (bool?)null,
+                whole_frame_unclassified = motionAvailable ? motion!.Unclassified : (bool?)null,
+                comparison_attempted = regionsProvided ? comparisonAttempted : (bool?)null,
+                all_regions_stable = regionsProvided ? regionsStable : (bool?)null,
+                expected_region_count = regions?.Count ?? 0,
+                measured_region_count = differences.Count,
+                changed_pixel_fraction_exclusive_max = regionsProvided ? FrameRegionStability.MaxChangedPixelFraction : (double?)null,
+                mean_absolute_channel_difference_inclusive_max = regionsProvided ? FrameRegionStability.MaxMeanAbsoluteChannelDifference : (double?)null,
+                changed_channel_threshold = regionsProvided ? FrameRegionStability.ChangedChannelThreshold : (int?)null,
+                regions = diagnostics.Select(FrameRegionPayload),
+            },
+        }, isError: true);
+    }
+
+    private static object FrameRegionPayload(FrameRegionDiagnostic diagnostic) => new
+    {
+        role = diagnostic.Role,
+        x = diagnostic.Region.X,
+        y = diagnostic.Region.Y,
+        width = diagnostic.Region.Width,
+        height = diagnostic.Region.Height,
+        status = diagnostic.Status,
+        changed_pixel_fraction = diagnostic.ChangedPixelFraction,
+        mean_absolute_channel_difference = diagnostic.MeanAbsoluteChannelDifference,
+        within_limits = diagnostic.WithinLimits,
+    };
+
     private const string KeyNames = "Keys: w, space, f5, numpad1, shift, ctrl, alt; chords joined by +, e.g. shift+w, w+d, ctrl+e; mouse buttons lmb, rmb, mmb, e.g. rmb+lmb.";
     private const string ObserveTimeoutHelp = "How long to keep watching for progress_box or expected_effect after the input, 0-60000 ms (default 1500). The input is sent once; only the observation polls. Raise it for slow menus, loads and server round trips.";
     private const string ObserveSettleHelp = "Wait this long after the input before the first observation frame, 0-10000 ms (default 120). Fixed wall-clock time, not scaled by pace.";
@@ -314,7 +381,8 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
     /// <summary>Shared foreground, input, capture, observation and timing pipeline for game actions.</summary>
     private Task<CallToolResult> ActAsync(string tool, string app, string coordSpace, string fingerprint, ActOpts o,
         Func<Ctx, Task<InputResult>> dispatch, CancellationToken ct, string? sourceFrameId = null,
-        string? appId = null, string? actionId = null)
+        string? appId = null, string? actionId = null, IReadOnlyList<Rectangle>? sourceFrameStableRegions = null,
+        int sourceFrameJpegQuality = 75, bool retryOnForegroundLoss = true)
         => Guard(tool, async () =>
         {
             var started = Stopwatch.GetTimestamp();
@@ -377,6 +445,8 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
                 bool needBefore = o.Verify || wantMotion || sourceFrameId != null || progressBox != null || o.ExpectedEffect == "frame_change";
                 byte[]? before = null, beforeGray = null, beforeProgress = null;
                 string? beforeFrameId = null;
+                bool sourceRegionsCompared = false, sourceRegionsStable = false;
+                IReadOnlyList<FrameRegionDifference> sourceRegionDifferences = [];
                 if (needBefore)
                 {
                     var captureStarted = Stopwatch.GetTimestamp();
@@ -391,19 +461,66 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
                             if (wantMotion) beforeGray = GameVision.Gray(b.Bitmap, exclusions: exclusions);
                             if (progressBox is { } pb && GameVision.PhysicalRegion(b.Bitmap, scale, pb.X, pb.Y, pb.W, pb.H) is { } pr)
                                 beforeProgress = GameVision.Signature(b.Bitmap, pr, exclusions);
+                            if (sourceFrameStableRegions is { Count: > 0 } regions && sourceFrameId is not null
+                                && sourceBinding is not null
+                                && GameScreenshotFrameCache.TryGetJpeg(sourceFrameId, out var sourceJpeg) && sourceJpeg is not null)
+                            {
+                                sourceRegionsCompared = true;
+                                sourceRegionsStable = FrameRegionStability.TryCompare(sourceJpeg, b.Bitmap,
+                                    sourceBinding.ImageWidth, sourceBinding.ImageHeight, sourceFrameJpegQuality,
+                                    regions, out sourceRegionDifferences);
+                            }
                         }
                     }
                 }
                 var sourceMotion = sourceFrameId != null && beforeFrameId != null ? GameVision.MotionSince(sourceFrameId, beforeFrameId) : null;
+                object? sourceFrameStability = null;
                 if (sourceFrameId is not null)
                 {
-                    if (sourceMotion is not { Available: true })
-                        return Fail("Current frame stability could not be verified against source_frame_id; reobserve before dispatch.");
-                    if (sourceMotion.Moved || sourceMotion.Unclassified)
-                        return Fail("The screen changed since source_frame_id; rediscover and decide again before dispatch.");
+                    if (ValidateSourceFrameStability(sourceFrameId, beforeFrameId, sourceFrameAgeMs, sourceMotion,
+                        sourceFrameStableRegions, sourceRegionsCompared, sourceRegionsStable, sourceRegionDifferences) is { } stabilityRefusal)
+                        return stabilityRefusal;
+                    var validatedMotion = sourceMotion!; // The stability validator refuses missing or unavailable motion evidence.
+                    bool regionsProvided = sourceFrameStableRegions is { Count: > 0 };
+                    var regionDiagnostics = regionsProvided
+                        ? FrameRegionStability.Describe(sourceFrameStableRegions!, sourceRegionDifferences, sourceRegionsCompared)
+                        : Array.Empty<FrameRegionDiagnostic>();
+                    if (regionsProvided)
+                        sourceFrameStability = new
+                        {
+                            mode = "caller_approved_static_menu_regions",
+                            source_frame_id = sourceFrameId,
+                            validation_frame_id = beforeFrameId,
+                            source_frame_age_ms = sourceFrameAgeMs,
+                            motion_available = validatedMotion.Available,
+                            whole_frame_moved = validatedMotion.Moved,
+                            whole_frame_unclassified = validatedMotion.Unclassified,
+                            region_comparison_attempted = sourceRegionsCompared,
+                            all_regions_stable = sourceRegionsStable,
+                            expected_region_count = sourceFrameStableRegions!.Count,
+                            measured_region_count = sourceRegionDifferences.Count,
+                            changed_pixel_fraction_exclusive_max = FrameRegionStability.MaxChangedPixelFraction,
+                            mean_absolute_channel_difference_inclusive_max = FrameRegionStability.MaxMeanAbsoluteChannelDifference,
+                            changed_channel_threshold = FrameRegionStability.ChangedChannelThreshold,
+                            regions = regionDiagnostics.Select(FrameRegionPayload),
+                        };
+                    else sourceFrameStability = new
+                    {
+                        mode = "whole_frame",
+                        source_frame_id = sourceFrameId,
+                        validation_frame_id = beforeFrameId,
+                        source_frame_age_ms = sourceFrameAgeMs,
+                        motion_available = validatedMotion.Available,
+                        whole_frame_moved = validatedMotion.Moved,
+                        whole_frame_unclassified = validatedMotion.Unclassified,
+                    };
+                    if (DateTimeOffset.UtcNow - sourceFrame.Timestamp > TimeSpan.FromMilliseconds(5_000))
+                        return Fail("source_frame_id exceeded its 5-second lifetime during dispatch validation; reobserve.");
                 }
                 var dispatchStarted = Stopwatch.GetTimestamp();
-                var input = await RetryOnForegroundLoss(() => { ctx.TargetPoints.Clear(); return dispatch(ctx); }, ct).ConfigureAwait(false);
+                var input = retryOnForegroundLoss
+                    ? await RetryOnForegroundLoss(() => { ctx.TargetPoints.Clear(); return dispatch(ctx); }, ct).ConfigureAwait(false)
+                    : (Result: await dispatch(ctx).ConfigureAwait(false), RetryWaitMs: 0L);
                 var dispatchMs = (long)Stopwatch.GetElapsedTime(dispatchStarted).TotalMilliseconds;
                 retryWaitMs = input.RetryWaitMs;
                 if (input.Result.InputSent)
@@ -597,6 +714,7 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
                     ["geometry_stale"] = geometryStale,
                     ["camera_moved_since_source_frame"] = cameraMoved,
                     ["camera_motion_unclassified"] = sourceMotion?.Unclassified,
+                    ["source_frame_stability"] = sourceFrameStability,
                     ["interrupted"] = false,
                     ["elapsed_hold_ms"] = result.ElapsedHoldMs,
                     ["attempt_count"] = result.Attempts,
@@ -1090,19 +1208,40 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
         if (ToolValidation.ValidateClick(button, click_count) is { } invalid) return Task.FromResult(Fail(invalid, UsageClick));
         if (hold_ms is < 0 or > InteractiveInput.MaxHoldMs) return Task.FromResult(Fail($"hold_ms must be between 0 and {InteractiveInput.MaxHoldMs}.", UsageClick));
         if (hold_ms > 0 && click_count != 1) return Task.FromResult(Fail("hold_ms needs click_count 1.", UsageClick));
+        return GameClickCore(app, x, y, button, click_count, hold_ms, coord_space,
+            new ActOpts(verify, then_screenshot, pace, max_latency_ms, observe, observe_box, progress_box, expected_effect,
+                bars_json, exclude_boxes, observe_timeout_ms, observe_settle_ms, observe_poll_ms),
+            source_frame_id, app_id, action_id, sourceFrameStableRegions: null, sourceFrameJpegQuality: 75,
+            retryOnForegroundLoss: true, ct);
+    }
+
+    internal Task<CallToolResult> GameJevClick(string app, int x, int y, string sourceFrameId, int sourceFrameJpegQuality,
+        IReadOnlyList<Rectangle>? sourceFrameStableRegions, bool verify, bool thenScreenshot,
+        string? appId, string? actionId, CancellationToken ct)
+        => GameClickCore(app, x, y, "left", 1, 0, "image",
+            new ActOpts(verify, thenScreenshot, null, 0, null, null), sourceFrameId, appId, actionId,
+            sourceFrameStableRegions, sourceFrameJpegQuality, retryOnForegroundLoss: false, ct);
+
+    private Task<CallToolResult> GameClickCore(string app, int x, int y, string button, int clickCount, int holdMs,
+        string coordSpace, ActOpts options, string? sourceFrameId, string? appId, string? actionId,
+        IReadOnlyList<Rectangle>? sourceFrameStableRegions, int sourceFrameJpegQuality, bool retryOnForegroundLoss,
+        CancellationToken ct)
+    {
+        if (sourceFrameStableRegions is { Count: < 3 or > 12 })
+            return Task.FromResult(Fail("Static-menu frame validation needs 3-12 reviewed target/context regions."));
         var btn = button.ToLowerInvariant() switch { "right" => MouseButton.Right, "middle" => MouseButton.Middle, _ => MouseButton.Left };
         var buttonKey = btn switch { MouseButton.Right => "rmb", MouseButton.Middle => "mmb", _ => "lmb" };
-        return ActAsync("game_click", app, coord_space, $"click:{button}:{click_count}:{hold_ms}", new ActOpts(verify, then_screenshot, pace, max_latency_ms, observe, observe_box, progress_box, expected_effect, bars_json, exclude_boxes, observe_timeout_ms, observe_settle_ms, observe_poll_ms), async ctx =>
+        return ActAsync("game_click", app, coordSpace, $"click:{button}:{clickCount}:{holdMs}", options, async ctx =>
         {
             var (sx, sy) = ctx.Target(x, y);
             ctx.Extra["screen_x"] = sx;
             ctx.Extra["screen_y"] = sy;
-            if (hold_ms > 0)
+            if (holdMs > 0)
             {
                 var moved = await InteractiveInput.GameMoveAsync(ctx.Hwnd, sx, sy, false, ctx.Human, ct).ConfigureAwait(false);
                 if (!moved.Success) return moved;
                 InputResult held;
-                try { held = await InteractiveInput.GameKeyAsync(ctx.Hwnd, InteractiveInput.ParseKeySet(buttonKey), "hold", hold_ms, 100, ctx.Human != null, ct).ConfigureAwait(false); }
+                try { held = await InteractiveInput.GameKeyAsync(ctx.Hwnd, InteractiveInput.ParseKeySet(buttonKey), "hold", holdMs, 100, ctx.Human != null, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (moved.InputSent)
                 {
                     return new InputResult(false, "sendinput_game_key_hold", "cancelled after the cursor move; no button was pressed", true, moved.ElapsedMs,
@@ -1116,9 +1255,9 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
                 };
             }
             return await (ctx.Human != null
-                ? InteractiveInput.HumanClickAsync(ctx.Hwnd, sx, sy, null, btn, click_count, ctx.Human, ct)
-                : InteractiveInput.ClickAsync(ctx.Hwnd, sx, sy, btn, click_count, ct)).ConfigureAwait(false);
-        }, ct, source_frame_id, app_id, action_id);
+                ? InteractiveInput.HumanClickAsync(ctx.Hwnd, sx, sy, null, btn, clickCount, ctx.Human, ct)
+                : InteractiveInput.ClickAsync(ctx.Hwnd, sx, sy, btn, clickCount, ct)).ConfigureAwait(false);
+        }, ct, sourceFrameId, appId, actionId, sourceFrameStableRegions, sourceFrameJpegQuality, retryOnForegroundLoss);
     }
 
     [McpServerTool(Name = "game_move"), Description(

@@ -3380,6 +3380,18 @@ public sealed class ComputerUseTools
                 real_input_backend_configured = backendConfigured,
                 real_input_backend_matches_configuration = backendMatches,
             },
+            decision_settings = new
+            {
+                decision_backend = _settings.DecisionBackend,
+                jev_mode = _settings.JevMode,
+                jev_model = _settings.JevModel,
+                jev_model_supports_box = string.Equals(_settings.JevModel, "jev-1.14.0", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(_settings.JevModel, "jev-preview", StringComparison.OrdinalIgnoreCase),
+                experimental_game_jev_act_enabled = _settings.EnableExperimentalGameJevAct,
+                experimental_game_jev_act_choice_threshold = _settings.ExperimentalGameJevActChoiceThreshold,
+                experimental_game_jev_act_click_threshold = _settings.ExperimentalGameJevActClickThreshold,
+                experimental_game_jev_act_ambiguity_margin = _settings.ExperimentalGameJevActAmbiguityMargin,
+            },
             tool_exposure = new
             {
                 tool_exposure = _settings.ToolExposure,
