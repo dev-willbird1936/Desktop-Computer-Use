@@ -14,12 +14,32 @@ public readonly record struct NormBox(double Left, double Top, double Right, dou
         && Left >= 0 && Top >= 0 && Right <= 1 && Bottom <= 1 && Left < Right && Top < Bottom;
 
     public static NormBox FromJev(JevBoxDecision box) => new(box.Left, box.Top, box.Right, box.Bottom);
+
+    /// <summary>
+    /// Two independent localizers agree when each one's center lies inside the other box inflated by 25% per side. Used to refuse a
+    /// confident but misplaced Box (a live BTD2 Box came back at confidence 0.74 and shifted off the intended card).
+    /// </summary>
+    public bool Agrees(NormBox other) => Contains(Inflate(other), CenterX, CenterY) && Contains(Inflate(this), other.CenterX, other.CenterY);
+
+    private static NormBox Inflate(NormBox b)
+    {
+        double w = (b.Right - b.Left) * 0.25, h = (b.Bottom - b.Top) * 0.25;
+        return new NormBox(b.Left - w, b.Top - h, b.Right + w, b.Bottom + h);
+    }
+
+    private static bool Contains(NormBox b, double x, double y) => x >= b.Left && x <= b.Right && y >= b.Top && y <= b.Bottom;
 }
 
 public static class FlowActionKind
 {
     public const string Click = "click";
     public const string KeyTap = "key_tap";
+
+    /// <summary>
+    /// Move the cursor to a Jev-localized spot inside a caller-approved region, confirm with a fresh-frame Jev check that the preview is valid
+    /// (for example a tower ghost on our half with no "Wrong Side!"), then click that same point. Reviewed seeds only; never learned or persisted as a box.
+    /// </summary>
+    public const string Place = "place";
 }
 
 /// <summary>One input the flow may send from a known screen. Persisted in the <see cref="JevActionBook"/>.</summary>
@@ -34,6 +54,18 @@ public sealed class FlowAction
     /// <summary>Learned location (clicks only). Null until Jev Box or a local detector localized it.</summary>
     public NormBox? Box { get; set; }
     public double BoxConfidence { get; set; }
+
+    /// <summary>
+    /// True once the box was reviewed by the caller or a click on it was followed by an observed screen change. An unverified box (from a
+    /// local detector, or from Jev before its first successful click) is never clicked without a fresh, agreeing Jev Box.
+    /// </summary>
+    public bool BoxVerified { get; set; }
+
+    /// <summary>Place only: the only window area (normalized) a placement may target. The Jev Box must lie inside it.</summary>
+    public NormBox? ApprovedRegion { get; set; }
+
+    /// <summary>Place only: the question Jev answers on a fresh frame with the cursor on the target (preview valid / placeable).</summary>
+    public string? PlacementCheck { get; set; }
 
     /// <summary>"caller" (reviewed seed), "discovered" (local detector) or "learned" (Jev Box).</summary>
     public string Source { get; set; } = "caller";
@@ -50,7 +82,7 @@ public sealed class FlowAction
 
     /// <summary>True when the flow can send this action without any visual localization.</summary>
     [JsonIgnore]
-    public bool ExecutableWithoutVision => Kind == FlowActionKind.KeyTap || Box is not null;
+    public bool ExecutableWithoutVision => Kind == FlowActionKind.KeyTap || Kind == FlowActionKind.Click && Box is not null && BoxVerified;
 }
 
 public sealed class FlowScreen
@@ -63,6 +95,9 @@ public sealed class FlowScreen
     public List<byte[]> Fingerprints { get; set; } = [];
     public int Visits { get; set; }
     public DateTimeOffset LastSeenUtc { get; set; }
+
+    /// <summary>Animated/gameplay screen whose frames never match a fingerprint. Its identity comes from the last verified sync, not from pixels.</summary>
+    public bool Dynamic { get; set; }
 }
 
 /// <summary>A captured window frame. Capturing is local and cheap; only sending <see cref="Jpeg"/> to Jev is expensive.</summary>
@@ -89,7 +124,8 @@ public sealed record FlowDecisionRequest(
     IReadOnlyList<FlowAction> NeedBox,
     bool AskGoalReached,
     bool AllowNeedVision,
-    string? SessionContext);
+    string? SessionContext,
+    string? PlacementCheck = null);
 
 public sealed record FlowDecision(
     string Choice,
@@ -101,7 +137,8 @@ public sealed record FlowDecision(
     IReadOnlyDictionary<string, FlowBox> Boxes,
     long LatencyMs,
     bool ImageSent,
-    string Model = "");
+    string Model = "",
+    double? PlacementValidProbability = null);
 
 public static class FlowControl
 {
@@ -125,6 +162,8 @@ public interface IJevFlowEnvironment
     /// <summary>Capture the target window. Must not send anything over the network.</summary>
     Task<FlowFrame> CaptureAsync(CancellationToken ct);
     Task<FlowDispatchResult> ClickAsync(FlowFrame frame, NormBox target, CancellationToken ct);
+    /// <summary>Move the cursor to the center of <paramref name="target"/> without clicking (placement preview).</summary>
+    Task<FlowDispatchResult> MoveAsync(FlowFrame frame, NormBox target, CancellationToken ct);
     Task<FlowDispatchResult> TapKeyAsync(FlowFrame frame, string key, CancellationToken ct);
 }
 

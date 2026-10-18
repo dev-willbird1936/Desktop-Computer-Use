@@ -1,0 +1,15 @@
+{
+  "_comment": "Example seed for a single-player BTD2 practice match, for bench/jev_flow_live.py --seed-file. REVIEW BEFORE USE: the approved_region is a fraction of the game window and must cover only your own half of the map; W/E/R are the tower hotkeys observed locally for tower slots 1-3 and may differ in your keybind settings.",
+  "seed_screen": "in_game",
+  "dynamic_screens": ["in_game"],
+  "actions": [
+    { "id": "select_dart", "kind": "key_tap", "key": "w", "description": "Select tower 1 (Dart Monkey)" },
+    {
+      "id": "place_dart", "kind": "place", "description": "Place the selected tower",
+      "target_description": "an empty buildable spot on the player's own half of the map, away from the track and from other towers",
+      "placement_check": "Is the tower ghost under the cursor shown as valid, with no 'Wrong Side!' or red invalid-position indicator?",
+      "approved_region": { "left": 0.03, "top": 0.15, "right": 0.47, "bottom": 0.80 }
+    },
+    { "id": "start_round", "kind": "key_tap", "key": "space", "description": "Start the round" }
+  ]
+}

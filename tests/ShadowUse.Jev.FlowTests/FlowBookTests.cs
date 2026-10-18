@@ -51,9 +51,9 @@ public sealed class FlowBookTests : IDisposable
         var book = new JevActionBook();
         book.EnsureScreen("main", "Main");
         book.Upsert("main", Click("big"), out _);
-        book.RecordBox("main", "big", new NormBox(0.1, 0.1, 0.9, 0.9), 0.99);
+        book.RecordVerifiedBox("main", "big", new NormBox(0.1, 0.1, 0.9, 0.9), 0.99);
         Assert.Null(book.MenuFor("main").Single().Box);
-        book.RecordBox("main", "big", new NormBox(0.4, 0.4, 0.5, 0.5), 0.99);
+        book.RecordVerifiedBox("main", "big", new NormBox(0.4, 0.4, 0.5, 0.5), 0.99);
         Assert.NotNull(book.MenuFor("main").Single().Box);
     }
 
@@ -119,14 +119,13 @@ public sealed class FlowBookTests : IDisposable
     }
 
     [Fact]
-    public void LearnedBoxIsDroppedAfterRepeatedNoEffectButCallerBoxIsKept()
+    public void LearnedBoxIsDroppedAfterAConfirmedNoEffectClickButCallerBoxIsKept()
     {
         var book = new JevActionBook();
         book.EnsureScreen("a", "A");
         var learned = Click("learned", "Play button", new NormBox(0.4, 0.4, 0.5, 0.5));
         var seeded = Click("seeded", "Other button", new NormBox(0.1, 0.1, 0.2, 0.2)); seeded.Source = "caller";
         book.Upsert("a", learned, out _); book.Upsert("a", seeded, out _);
-        Assert.False(book.RecordNoEffect("a", "learned"));
         Assert.True(book.RecordNoEffect("a", "learned"));
         Assert.Null(book.MenuFor("a").Single(a => a.Id == "learned").Box);
         book.RecordNoEffect("a", "seeded"); book.RecordNoEffect("a", "seeded");
@@ -168,5 +167,83 @@ public sealed class FlowBookTests : IDisposable
         book.EnsureScreen("base", "base"); book.AddFingerprint("base", screen);
         Assert.Equal("base", book.Match(noisy, 0.06)!.Value.ScreenId);
         Assert.Null(book.Match(withPanel, 0.06));
+    }
+
+    [Fact]
+    public void DetectorBoxesNeedVerificationBeforeTextOnlyUseButCallerBoxesDoNot()
+    {
+        var book = new JevActionBook();
+        book.EnsureScreen("a", "A");
+        book.Upsert("a", Click("detected", "Play button", new NormBox(0.4, 0.4, 0.5, 0.5)), out _);
+        var reviewed = Click("reviewed", "Other button", new NormBox(0.1, 0.1, 0.2, 0.2)); reviewed.Source = "caller";
+        book.Upsert("a", reviewed, out _);
+
+        Assert.False(book.MenuFor("a").Single(a => a.Id == "detected").ExecutableWithoutVision);
+        Assert.True(book.MenuFor("a").Single(a => a.Id == "reviewed").ExecutableWithoutVision);
+        book.RecordVerifiedBox("a", "detected", new NormBox(0.4, 0.4, 0.5, 0.5), 0.95);
+        Assert.True(book.MenuFor("a").Single(a => a.Id == "detected").ExecutableWithoutVision);
+    }
+
+    [Fact]
+    public void BoxAgreementRejectsAShiftedBoxEvenWhenItIsConfident()
+    {
+        var intended = new NormBox(0.30, 0.40, 0.45, 0.58);
+        Assert.True(intended.Agrees(new NormBox(0.31, 0.41, 0.46, 0.59)));
+        Assert.False(intended.Agrees(new NormBox(0.62, 0.40, 0.77, 0.58)));   // a neighbouring card
+    }
+
+    [Theory]
+    [InlineData("Place Dart Monkey")] [InlineData("Drag tower to map")] [InlineData("Sell tower")] [InlineData("Aim cannon")]
+    public void InWorldPlacementControlsAreNotOfferedToTheMenuLoop(string label)
+    {
+        var book = new JevActionBook();
+        book.EnsureScreen("a", "A");
+        Assert.False(book.Upsert("a", Click("x", label), out _));
+    }
+
+    [Theory]
+    [InlineData("w")] [InlineData("e")] [InlineData("q")]
+    public void TowerHotkeyLettersNeedAReviewedCallerSeed(string key)
+    {
+        Assert.NotNull(JevFlowGuard.Refusal(new FlowAction { Id = "k", Kind = FlowActionKind.KeyTap, Key = key, Description = "tap", Source = "discovered" }));
+        Assert.Null(JevFlowGuard.Refusal(new FlowAction { Id = "k", Kind = FlowActionKind.KeyTap, Key = key, Description = "Select Dart Monkey", Source = "caller" }));
+        Assert.NotNull(JevFlowGuard.Refusal(new FlowAction { Id = "k", Kind = FlowActionKind.KeyTap, Key = "ctrl+" + key, Description = "chord", Source = "caller" }));
+    }
+
+    private static FlowAction Place(NormBox? region = null) => new()
+    {
+        Id = "place_dart", Kind = FlowActionKind.Place, Description = "Place the selected tower", TargetDescription = "an empty buildable spot on our half of the map",
+        PlacementCheck = "Is the tower ghost under the cursor shown as valid, with no 'Wrong Side!' message?", ApprovedRegion = region ?? new NormBox(0.02, 0.15, 0.48, 0.85), Source = "caller",
+    };
+
+    [Fact]
+    public void PlacementActionsNeedAReviewedSeedAnApprovedRegionAndAValidityCheck()
+    {
+        Assert.Null(JevFlowGuard.Refusal(Place()));
+        var discovered = Place(); discovered.Source = "discovered";
+        Assert.NotNull(JevFlowGuard.Refusal(discovered));
+        var noCheck = Place(); noCheck.PlacementCheck = null;
+        Assert.NotNull(JevFlowGuard.Refusal(noCheck));
+        Assert.NotNull(JevFlowGuard.Refusal(Place(new NormBox(0.0, 0.0, 1.0, 1.0))));   // the whole window is not an "our half"
+        var stored = Place(); stored.Box = new NormBox(0.1, 0.1, 0.12, 0.12);
+        Assert.NotNull(JevFlowGuard.Refusal(stored));
+    }
+
+    [Theory]
+    [InlineData("w", "w")] [InlineData("W", "w")] [InlineData("e", "e")] [InlineData("R", "r")] [InlineData("z", "z")]
+    [InlineData("0", "0")] [InlineData("9", "9")] [InlineData("space", "space")] [InlineData("enter", "enter")] [InlineData("escape", "escape")] [InlineData("Left", "left")]
+    public void GuardedGameKeyPolicyAcceptsSingleUnmodifiedKeysIncludingLetterHotkeys(string key, string expected)
+    {
+        Assert.True(JevFlowGuard.TryNormalizeSingleKey(key, out var normalized));
+        Assert.Equal(expected, normalized);
+    }
+
+    [Theory]
+    [InlineData("alt+f4")] [InlineData("Alt+F4")] [InlineData("ctrl+w")] [InlineData("Ctrl+W")] [InlineData("ctrl+shift+esc")] [InlineData("win")]
+    [InlineData("shift")] [InlineData("ctrl")] [InlineData("alt")] [InlineData("f4")] [InlineData("ww")] [InlineData("w+e")] [InlineData("lmb")]
+    [InlineData("")] [InlineData("é")] [InlineData(" w")]
+    public void GuardedGameKeyPolicyStillRejectsChordsSystemShortcutsAndFunctionKeys(string key)
+    {
+        Assert.False(JevFlowGuard.TryNormalizeSingleKey(key, out _));
     }
 }

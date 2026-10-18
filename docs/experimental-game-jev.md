@@ -1,5 +1,7 @@
 # Experimental Jev game actions
 
+For the responsive loop that learns screens and skips images and verification screenshots on known screens, see [jev-flow.md](jev-flow.md). This page covers the guarded one-action tool.
+
 `game_jev_act` is an experimental Jev controller for game UI actions. It is not part of the stable `dcu` MCP. Keep it disabled outside a separate experimental build and MCP entry. The default is one action per call; an opt-in serial run is bounded to four unique menu actions and 60 seconds. The authorized live scope for this experiment is one **single-player BTD2 match**.
 
 ## Enablement
@@ -44,7 +46,7 @@ Example menu:
 ]
 ```
 
-`kind` is `click` or `key_tap`. Clicks are left-click-only. Key taps are limited to `space`, `enter`, `escape`, `tab`, arrow keys, and digits 0–9; chords, holds, arbitrary keys, and extra fields are rejected. `stability` is optional and click-only; its only accepted value is `static_menu`. The menu is complete only as the caller's allowed choices for this invocation; it is **not** a claim that DCU found every control or target in the game.
+`kind` is `click` or `key_tap`. Clicks are left-click-only. Key taps are limited to one unmodified key: `space`, `enter`, `escape`, `tab`, arrow keys, a digit 0–9, or a single letter A–Z (tower hotkeys such as W/E/R; letters are normalized to lowercase and require `GameMode`). Modifier chords and system shortcuts such as `Alt+F4` or `Ctrl+W`, function keys, bare modifiers, mouse-button keys, holds, arbitrary keys, and extra fields are rejected. `stability` is optional and click-only; its only accepted value is `static_menu`. The menu is complete only as the caller's allowed choices for this invocation; it is **not** a claim that DCU found every control or target in the game.
 
 Use `execute:false` for a one-step preview first. If any click options are present, DCU sends one fresh image-backed request containing Choice, per-option applicability Noul, click-target presence Noul, and one Box question per click option. It returns the selected option and an overlay preview. For a key-only menu, Jev receives the bounded state/action history as text and no image is attached. Screenshot capture and DCU frame guards still run for key taps.
 

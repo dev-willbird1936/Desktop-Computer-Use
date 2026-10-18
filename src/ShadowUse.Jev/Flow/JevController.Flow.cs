@@ -13,7 +13,7 @@ public sealed partial class JevController : IJevFlowDecider
         "Prefer the single action that moves directly toward the goal from the current screen. Never invent actions, keys, coordinates or permission. " +
         "known_state tells you which screen the caller believes is showing and what each action did last time; it can be stale. " +
         "If you cannot see the screen (no screenshot is attached) and the known state does not clearly determine the next action, choose NEED_VISION. " +
-        "WAIT means the screen is mid-transition; STOP/ASK_USER mean no listed action is appropriate.";
+        "WAIT means the screen is mid-transition; STOP/ASK_USER mean no listed action is appropriate. DONE (text-only) means you believe the goal is already met.";
 
     public async Task<FlowDecision> DecideFlowAsync(FlowDecisionRequest request, CancellationToken ct = default)
     {
@@ -27,8 +27,10 @@ public sealed partial class JevController : IJevFlowDecider
             throw new JevValidationException("Screen recognition and Box need an image-backed request.");
         if (request.NeedBox.Count > 0 && !SupportsBox)
             throw new JevValidationException("Jev Box requires model jev-1.14.0 or jev-preview.");
-        if (request.Menu.Count == 0 && !request.RecognizeScreen)
-            throw new JevValidationException("Nothing to decide: no menu and no screen recognition requested.");
+        if (request.PlacementCheck is not null && (!image || request.PlacementCheck.Length is 0 or > 300))
+            throw new JevValidationException("A placement check needs an image and a question of 1-300 characters.");
+        if (request.Menu.Count == 0 && !request.RecognizeScreen && request.PlacementCheck is null)
+            throw new JevValidationException("Nothing to decide: no menu, no screen recognition and no placement check requested.");
 
         var questions = new Dictionary<string, object>(StringComparer.Ordinal);
         var actionIds = new HashSet<string>(StringComparer.Ordinal);
@@ -39,14 +41,22 @@ public sealed partial class JevController : IJevFlowDecider
             {
                 if (!actionIds.Add(action.Id)) throw new JevValidationException($"Duplicate action id '{action.Id}'.");
                 string next = action.ExpectedNextScreen is { } n ? $" Last time this led to screen '{n}'." : "";
-                string how = action.Kind == FlowActionKind.KeyTap ? $"Tap key {action.Key}." : $"Click: {action.TargetDescription}.";
+                string how = action.Kind switch
+                {
+                    FlowActionKind.KeyTap => $"Tap key {action.Key}.",
+                    FlowActionKind.Place => $"Place at: {action.TargetDescription}. The caller moves the cursor there and checks the preview is valid before clicking.",
+                    _ => $"Click: {action.TargetDescription}.",
+                };
                 criteria[action.Id] = $"{action.Description}. {how}{next}";
             }
             criteria[FlowControl.Wait] = "Take no input; the screen is mid-transition or the last input has not taken effect yet.";
             criteria[FlowControl.Stop] = "No listed action is appropriate; stop without input.";
             criteria[FlowControl.AskUser] = "Stop and ask the user to clarify or approve.";
             if (request.AllowNeedVision && !image)
+            {
                 criteria[FlowControl.NeedVision] = "The known state does not determine the right next action; look at the screenshot first.";
+                criteria[FlowControl.Done] = "The known state suggests the goal is already complete; the caller will verify with a screenshot before stopping.";
+            }
             foreach (var key in criteria.Keys) actionIds.Add(key);
             questions["action"] = new
             {
@@ -66,6 +76,16 @@ public sealed partial class JevController : IJevFlowDecider
                 instructions = new { policy = "Pick the known screen that matches the screenshot. Choose unknown_screen if none clearly match.", predicted_screen = request.PredictedScreenId },
             };
         }
+        if (request.PlacementCheck is not null)
+            questions["placement_valid"] = new
+            {
+                type = "noul",
+                instructions = new
+                {
+                    question = request.PlacementCheck,
+                    policy = "Judge only what the screenshot shows right now with the cursor/ghost where it is. Answer low if there is any invalid-position indicator (for example a red ghost or a 'Wrong Side!' / 'Can't place here' message) or if you cannot tell.",
+                },
+            };
         if (request.AskGoalReached && image)
             questions["goal_reached"] = new { type = "noul", instructions = "Does the screenshot show that the goal is already complete?" };
 
@@ -156,6 +176,8 @@ public sealed partial class JevController : IJevFlowDecider
             if (request.AskGoalReached && image && answers.TryGetProperty("goal_reached", out var goalAnswer) && TryValidateNoul(goalAnswer, out var goalValue))
                 goal = goalValue;
 
+            double? placementValid = request.PlacementCheck is null ? null : ValidateRequiredNoul(answers, "placement_valid");
+
             var boxes = new Dictionary<string, FlowBox>(StringComparer.Ordinal);
             index = 0;
             foreach (var (actionId, _) in boxQuestions)
@@ -166,7 +188,7 @@ public sealed partial class JevController : IJevFlowDecider
                 if (TryValidateRequiredBox(answers, box, visibility, latencyMs, out var decision))
                     boxes[actionId] = new FlowBox(NormBox.FromJev(decision), visibility, decision.Confidence);
             }
-            return new FlowDecision(choice, confidence, probabilities, screenId, screenConfidence, goal, boxes, latencyMs, image, model);
+            return new FlowDecision(choice, confidence, probabilities, screenId, screenConfidence, goal, boxes, latencyMs, image, model, placementValid);
         }
     }
 

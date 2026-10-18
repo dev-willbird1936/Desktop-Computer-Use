@@ -959,12 +959,12 @@ public sealed class GameJevTools(UiaService uia, ShadowSettings settings, JevCon
                 {
                     if (!HasOnlyProperties(propertyNames, "id", "kind", "description", "key")
                         || !TryReadActionText(item, "key", 16, out string key)
-                        || !AllowedExperimentalKeys.Contains(key))
+                        || !TryNormalizeExperimentalKey(key, out string normalizedKey))
                     {
-                        error = $"Key option '{id}' must use one allowed single key (space, enter, escape, tab, arrows, or digits 0-9); chords and system shortcuts are refused.";
+                        error = $"Key option '{id}' must use one allowed single unmodified key (space, enter, escape, tab, arrows, or a single letter or digit); modifier chords such as Ctrl+W or Alt+F4, function keys and system shortcuts are refused.";
                         return false;
                     }
-                    options.Add(new ExperimentalActionOption(id, kind, description, null, key, null, "strict"));
+                    options.Add(new ExperimentalActionOption(id, kind, description, null, normalizedKey, null, "strict"));
                 }
                 else
                 {
@@ -1193,6 +1193,14 @@ public sealed class GameJevTools(UiaService uia, ShadowSettings settings, JevCon
         "space", "enter", "escape", "tab", "up", "down", "left", "right",
         "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
     };
+
+    /// <summary>
+    /// One unmodified key: the named navigation keys, a digit, or a single ASCII letter (tower hotkeys such as W/E/R). Anything containing a
+    /// modifier or '+', function keys, and multi-letter names other than the allowlisted ones are rejected, so Alt+F4 and Ctrl+W stay refused.
+    /// Letters are normalized to lowercase before they reach the guarded key path.
+    /// </summary>
+    internal static bool TryNormalizeExperimentalKey(string key, out string normalized)
+        => ShadowUse.Jev.Flow.JevFlowGuard.TryNormalizeSingleKey(key, out normalized);
 
     private object? InitialError(string goal, string observationId)
     {

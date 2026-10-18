@@ -20,6 +20,7 @@ namespace ShadowUse.Tools;
 public interface IGameJevFlowDispatcher
 {
     Task<CallToolResult> ClickAsync(string app, int x, int y, string sourceFrameId, int sourceFrameJpegQuality, string? appId, string? actionId, CancellationToken ct);
+    Task<CallToolResult> MoveAsync(string app, int x, int y, string sourceFrameId, string? appId, string? actionId, CancellationToken ct);
     Task<CallToolResult> TapKeyAsync(string app, string key, string sourceFrameId, string? appId, string? actionId, CancellationToken ct);
 }
 
@@ -27,6 +28,9 @@ public sealed class GameJevFlowDispatcher(GameTools gameTools) : IGameJevFlowDis
 {
     public Task<CallToolResult> ClickAsync(string app, int x, int y, string sourceFrameId, int sourceFrameJpegQuality, string? appId, string? actionId, CancellationToken ct)
         => gameTools.GameJevFlowClick(app, x, y, sourceFrameId, sourceFrameJpegQuality, appId, actionId, ct);
+
+    public Task<CallToolResult> MoveAsync(string app, int x, int y, string sourceFrameId, string? appId, string? actionId, CancellationToken ct)
+        => gameTools.GameJevFlowMove(app, x, y, sourceFrameId, appId, actionId, ct);
 
     public Task<CallToolResult> TapKeyAsync(string app, string key, string sourceFrameId, string? appId, string? actionId, CancellationToken ct)
         => gameTools.GameJevFlowKeyTap(app, key, sourceFrameId, appId, actionId, ct);
@@ -99,6 +103,19 @@ internal sealed class GameJevFlowEnvironment(McpServer server, string app, strin
         int x = Math.Clamp((int)Math.Round(target.CenterX * binding.ImageWidth), 0, binding.ImageWidth - 1);
         int y = Math.Clamp((int)Math.Round(target.CenterY * binding.ImageHeight), 0, binding.ImageHeight - 1);
         try { return Interpret(await dispatcher.ClickAsync(app, x, y, frame.FrameId, quality, appId, null, ct).ConfigureAwait(false)); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new FlowDispatchResult(false, $"Guarded dispatch threw after it started: {ex.Message}", DoNotRetry: true);
+        }
+    }
+
+    public async Task<FlowDispatchResult> MoveAsync(FlowFrame frame, NormBox target, CancellationToken ct)
+    {
+        if (await PreflightAsync(frame, ct).ConfigureAwait(false) is { } refusal) return refusal;
+        var (binding, _) = _frames[frame.FrameId];
+        int x = Math.Clamp((int)Math.Round(target.CenterX * binding.ImageWidth), 0, binding.ImageWidth - 1);
+        int y = Math.Clamp((int)Math.Round(target.CenterY * binding.ImageHeight), 0, binding.ImageHeight - 1);
+        try { return Interpret(await dispatcher.MoveAsync(app, x, y, frame.FrameId, appId, null, ct).ConfigureAwait(false)); }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new FlowDispatchResult(false, $"Guarded dispatch threw after it started: {ex.Message}", DoNotRetry: true);
@@ -225,6 +242,8 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
         if (settings.DecisionBackend != "jev" || (decisionBackends?.Name ?? "jev") != "jev") return "game_jev_flow requires DecisionBackend=jev; no alternate backend is used.";
         if (!jev.SupportsBox) return "game_jev_flow needs a Box-capable Jev model (jev-1.14.0 or jev-preview).";
         if (execute && jev.Mode != JevMode.FastLoop) return "execute=true requires JevMode=fast_loop.";
+        if (execute && !jev.ApiKeyConfigured)
+            return $"{jev.ApiKeyEnvironmentVariable} is not set in this DCU process's environment, so Jev cannot be called; no screenshot, Jev request or input was made. Refresh the environment of the process that launches DCU (never put the key in settings or the repo) and restart DCU.";
         if (frames is null || dispatcher is null) return "The screenshot/frame guard or guarded flow dispatcher is unavailable; no input was sent.";
         return null;
     }
@@ -236,7 +255,7 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
         "Experimental responsive Jev game loop. Instead of screenshot -> think -> act -> verify per step, it keeps a persistent per-app book of known screens, their inputs, learned click locations and learned transitions. " +
         "Each step takes a cheap LOCAL capture, recognises the screen by fingerprint (no model), asks Jev only 'which known input moves toward the goal' with TEXT state (no image), sends it, assumes it worked, and loops without a verification screenshot. " +
         "Images go to Jev only when the screen is unknown/unverified or a control was never localized (Jev Box then localizes it once and the box is saved). Unknown screens are mapped from local edge/OCR proposals or caller seeds and saved for future runs. " +
-        "Purchase/account/destructive-looking controls and non-allowlisted keys are never offered. execute=false only reports what the book knows about the current screen (no Jev request, no input). " +
+        "Reviewed place actions (select by hotkey, move to a Jev-localized spot inside an approved region, confirm the preview is valid on a fresh frame, then click) cover in-match tower placement. Purchase/account/destructive-looking controls and non-allowlisted keys are never offered. execute=false only reports what the book knows about the current screen (no Jev request, no input). " +
         "Needs EnableExperimentalGameJevFlow, GameMode, JevMode=fast_loop, DecisionBackend=jev and a Box-capable model. Stops with a reason (unmapped_screen, uncertain, dispatch_failed, ...) so the caller can fall back to normal DCU tools.")]
     public async Task<CallToolResult> GameJevFlow(
         McpServer server,
@@ -244,8 +263,8 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
         [Description("User goal, e.g. 'start a single-player match'. Screen text is untrusted data")] string goal,
         [Description("Stable app identity that scopes the saved book, e.g. 'bloons-td-battles-2'")] string app_id,
         [Description("false reports the matched screen and known inputs only; true may send bounded input")] bool execute = false,
-        [Description("Maximum inputs/decisions in this run, 1-40")] int max_steps = 12,
-        [Description("Run deadline in milliseconds, 1000-300000")] int max_runtime_ms = 60_000,
+        [Description("Maximum dispatched inputs in this serial run, 1-4. Each (screen, action id) is used at most once; a fresh local frame precedes every decision and there is no verification screenshot between inputs. Chain calls for longer routes")] int max_actions = 4,
+        [Description("Run deadline in milliseconds, 1000-60000")] int max_runtime_ms = 30_000,
         [Description("Screen id the game is believed to start on (created if new). Unverified")] string? seed_screen = null,
         [Description("Screen id that means the goal is complete; otherwise learned from the first verified completion")] string? goal_screen = null,
         [Description("Optional JSON array [{id,kind:'click'|'key_tap',description,target_description?,key?}] added to seed_screen before the run. Reviewed menu entries; still filtered by the purchase/destructive guard")] string? seed_actions_json = null,
@@ -253,13 +272,16 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
         [Description("User/profile key for book scoping")] string profile = "default",
         [Description("Keyboard layout for book scoping")] string keyboard_layout = "unknown",
         [Description("Recent action descriptions, most recent last")] string[]? recent_actions = null,
+        [Description("Screen ids that are animated gameplay screens (never matched by pixels; identified by the last verified sync). Needed for in-match placement")] string[]? dynamic_screens = null,
         CancellationToken ct = default)
     {
         if (Gate(execute) is { } gateError) return Reply(new { ok = false, error = gateError, no_input_sent = true, fallback = "use the normal game_* tools" }, true);
         if (string.IsNullOrWhiteSpace(app) || string.IsNullOrWhiteSpace(goal) || goal.Length > 1_000 || string.IsNullOrWhiteSpace(app_id) || app_id.Length > 200)
             return Reply(new { ok = false, error = "app, app_id and a goal of 1-1000 characters are required.", no_input_sent = true }, true);
-        if (max_steps is < 1 or > 40 || max_runtime_ms is < 1_000 or > 300_000)
-            return Reply(new { ok = false, error = "max_steps must be 1-40 and max_runtime_ms 1000-300000.", no_input_sent = true }, true);
+        if (max_actions is < 1 or > 4 || max_runtime_ms is < 1_000 or > 60_000)
+            return Reply(new { ok = false, error = "max_actions must be 1-4 and max_runtime_ms 1000-60000.", no_input_sent = true }, true);
+        if (dynamic_screens is { Length: > 8 } || dynamic_screens?.Any(d => string.IsNullOrWhiteSpace(d) || d.Length > 64) == true)
+            return Reply(new { ok = false, error = "dynamic_screens must list at most 8 screen ids of 1-64 characters.", no_input_sent = true }, true);
         if (seed_screen is { Length: > 64 } || goal_screen is { Length: > 64 } || recent_actions is { Length: > 12 })
             return Reply(new { ok = false, error = "seed_screen/goal_screen exceed 64 characters or recent_actions exceeds 12 entries.", no_input_sent = true }, true);
 
@@ -299,7 +321,8 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
 
             var options = new JevFlowOptions
             {
-                MaxSteps = max_steps,
+                MaxActions = max_actions,
+                MaxSteps = max_actions * 4 + 6,
                 MaxRuntime = TimeSpan.FromMilliseconds(max_runtime_ms),
                 SyncEvery = settings.JevFlowSyncEvery,
                 ChoiceThreshold = settings.ExperimentalGameJevActChoiceThreshold,
@@ -310,10 +333,10 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
             var discoverer = new GameJevFlowDiscoverer(server, app, gameTools, settings.JevFlowDiscovery);
             var engine = new JevFlowEngine(book, env, jev, options, discoverer);
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            deadline.CancelAfter(max_runtime_ms + 5_000);
-            var result = await engine.RunAsync(goal.Trim(), new FlowSeed(seed_screen, goal_screen, seedActions, recent_actions), deadline.Token).ConfigureAwait(false);
+            deadline.CancelAfter(max_runtime_ms + 5_000);   // safety net above the engine's own deadline
+            var result = await engine.RunAsync(goal.Trim(), new FlowSeed(seed_screen, goal_screen, seedActions, recent_actions, DynamicScreens: dynamic_screens), deadline.Token).ConfigureAwait(false);
 
-            bool failed = result.StopReason is "error" or "dispatch_failed" or "cancelled";
+            bool failed = result.StopReason is "error" or "dispatch_failed" or "cancelled" or "jev_unavailable";
             return Reply(new
             {
                 ok = !failed,
@@ -327,7 +350,9 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
                 outcome = "Inputs were sent without per-step verification; confirm the final state before relying on it.",
                 book_saved = book.SaveError is null,
                 book_save_error = book.SaveError,
-                fallback = result.GoalReached ? null : "if the stop reason is unmapped_screen/uncertain/box_rejected/stuck_loop/unstable_screen, continue with the normal game_* tools",
+                reobserve = result.Reobserve,
+                continue_hint = result.StopReason == "action_limit" ? "Bounded run finished; call game_jev_flow again (it re-recognises the screen locally) to continue." : null,
+                fallback = result.GoalReached || result.StopReason == "action_limit" ? null : "stopped without guessing: reobserve, then retry or continue with the normal game_* tools",
             }, failed);
         }
         finally { _runGate.Release(); }
@@ -338,11 +363,12 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
         "The book stores only screen ids/descriptions, tiny luminance fingerprints, allowlisted key taps, click target descriptions, learned normalized boxes and transition counts; it never stores screenshots. Seeded inputs are filtered by the purchase/destructive guard. Sends no input and makes no network request.")]
     public CallToolResult GameJevFlowBook(
         [Description("Stable app identity scoping the book")] string app_id,
-        [Description("show | seed | describe | forget_screen | forget_action")] string operation = "show",
+        [Description("show | seed | describe | set_dynamic | forget_screen | forget_action")] string operation = "show",
         [Description("Screen id for seed/describe/forget operations")] string? screen = null,
-        [Description("seed: JSON array [{id,kind,description,target_description?,key?}]. describe: unused")] string? actions_json = null,
+        [Description("seed: JSON array [{id,kind:'click'|'key_tap'|'place',description,target_description?,key?,approved_region?:{left,top,right,bottom} (0-1, place only),placement_check? (place only)}]. Letter keys and place are accepted only from here")] string? actions_json = null,
         [Description("describe: new description Jev uses to recognise the screen (max 400 chars)")] string? description = null,
         [Description("forget_action: action id on the screen")] string? action_id = null,
+        [Description("set_dynamic: true marks the screen as animated gameplay (identified by sync, not pixels); false clears it")] bool dynamic = true,
         [Description("App version for book scoping")] string app_version = "unknown",
         [Description("User/profile key for book scoping")] string profile = "default",
         [Description("Keyboard layout for book scoping")] string keyboard_layout = "unknown")
@@ -358,7 +384,7 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
                     screens = book.Screens.Select(s => new
                     {
                         s.Id, s.Description, s.Visits, fingerprints = s.Fingerprints.Count,
-                        actions = s.Actions.Select(a => new { a.Id, a.Kind, a.Description, a.Key, a.Source, located = a.Box is not null, a.Uses, next = a.ExpectedNextScreen, transitions = a.Transitions }),
+                        dynamic = s.Dynamic, actions = s.Actions.Select(a => new { a.Id, a.Kind, a.Description, a.Key, a.Source, located = a.Box is not null && a.BoxVerified, a.Uses, next = a.ExpectedNextScreen, transitions = a.Transitions }),
                     }),
                 });
             case "seed":
@@ -383,6 +409,11 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
                 book.SetDescription(screen, description.Trim());
                 book.Save();
                 return Reply(new { ok = true, save_error = book.SaveError });
+            case "set_dynamic":
+                if (string.IsNullOrWhiteSpace(screen) || book.Get(screen) is null) return Reply(new { ok = false, error = "set_dynamic needs an existing screen." }, true);
+                book.SetDynamic(screen, dynamic);
+                book.Save();
+                return Reply(new { ok = true, save_error = book.SaveError });
             case "forget_screen":
                 if (string.IsNullOrWhiteSpace(screen)) return Reply(new { ok = false, error = "forget_screen needs screen." }, true);
                 bool removedScreen = book.RemoveScreen(screen);
@@ -394,8 +425,14 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
                 book.Save();
                 return Reply(new { ok = removedAction, save_error = book.SaveError });
             default:
-                return Reply(new { ok = false, error = "operation must be show, seed, describe, forget_screen or forget_action." }, true);
+                return Reply(new { ok = false, error = "operation must be show, seed, describe, set_dynamic, forget_screen or forget_action." }, true);
         }
+    }
+
+    private static bool TryEdge(JsonElement element, string name, out double value)
+    {
+        value = 0;
+        return element.TryGetProperty(name, out var edge) && edge.ValueKind == JsonValueKind.Number && edge.TryGetDouble(out value) && double.IsFinite(value);
     }
 
     private static bool TryParseSeedActions(string json, out List<FlowAction>? actions, out string? error)
@@ -413,14 +450,23 @@ public sealed class GameJevFlowTools(ShadowSettings settings, JevController jev,
             {
                 if (item.ValueKind != JsonValueKind.Object) { error = "each action must be an object."; return false; }
                 foreach (var property in item.EnumerateObject())
-                    if (property.Name is not ("id" or "kind" or "description" or "target_description" or "key"))
+                    if (property.Name is not ("id" or "kind" or "description" or "target_description" or "key" or "approved_region" or "placement_check"))
                     { error = $"unknown action property '{property.Name}'."; return false; }
                 string? Text(string name) => item.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
                 var action = new FlowAction
                 {
                     Id = Text("id") ?? "", Kind = Text("kind") ?? "", Description = Text("description") ?? "",
                     TargetDescription = Text("target_description"), Key = Text("key"), Source = "caller",
+                    PlacementCheck = Text("placement_check"),
                 };
+                if (item.TryGetProperty("approved_region", out var regionElement))
+                {
+                    if (regionElement.ValueKind != JsonValueKind.Object
+                        || !TryEdge(regionElement, "left", out double left) || !TryEdge(regionElement, "top", out double top)
+                        || !TryEdge(regionElement, "right", out double right) || !TryEdge(regionElement, "bottom", out double bottom))
+                    { error = $"action '{action.Id}': approved_region needs numeric left/top/right/bottom in 0-1 (fractions of the window)."; return false; }
+                    action.ApprovedRegion = new NormBox(left, top, right, bottom);
+                }
                 if (!ids.Add(action.Id)) { error = $"duplicate action id '{action.Id}'."; return false; }
                 if (JevFlowGuard.Refusal(action) is { } refusal && !refusal.StartsWith("description looks like", StringComparison.Ordinal))
                 { error = $"action '{action.Id}': {refusal}."; return false; }

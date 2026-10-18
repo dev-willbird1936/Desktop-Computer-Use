@@ -26,6 +26,10 @@ public sealed partial class JevController
     }
 
     public JevMode Mode => _options.Mode;
+
+    /// <summary>True when the configured API-key environment variable is set in THIS process. Says nothing about whether the key is valid.</summary>
+    public bool ApiKeyConfigured => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(_options.ApiKeyEnvironmentVariable));
+    public string ApiKeyEnvironmentVariable => _options.ApiKeyEnvironmentVariable;
     public double MinExecuteConfidence => _options.MinExecuteConfidence;
     public string Model => _options.Model;
     public bool SupportsBox => string.Equals(_options.Model, "jev-1.14.0", StringComparison.OrdinalIgnoreCase)

@@ -1233,6 +1233,16 @@ public sealed class GameTools(UiaService uia, ShadowSettings settings, LoopGuard
             new ActOpts(false, false, null, 0, null, null), sourceFrameId, appId, actionId,
             null, sourceFrameJpegQuality, retryOnForegroundLoss: false, ct, screenIdentityVerified: true);
 
+    /// <summary>Flow-loop cursor move (placement preview) under the same verified-screen stability rule; sends no click.</summary>
+    internal Task<CallToolResult> GameJevFlowMove(string app, int x, int y, string sourceFrameId, string? appId, string? actionId, CancellationToken ct)
+        => ActAsync("game_move", app, "image", "move:absolute", new ActOpts(false, false, null, 0, null, null), async ctx =>
+        {
+            var (sx, sy) = ctx.Target(x, y);
+            ctx.Extra["screen_x"] = sx;
+            ctx.Extra["screen_y"] = sy;
+            return await InteractiveInput.GameMoveAsync(ctx.Hwnd, sx, sy, false, ctx.Human, ct).ConfigureAwait(false);
+        }, ct, sourceFrameId, appId, actionId, null, 75, true, screenIdentityVerified: true);
+
     /// <summary>Flow-loop single key tap with the same verified-screen stability rule as <see cref="GameJevFlowClick"/>.</summary>
     internal Task<CallToolResult> GameJevFlowKeyTap(string app, string key, string sourceFrameId, string? appId, string? actionId, CancellationToken ct)
     {

@@ -1,0 +1,102 @@
+{
+  "kind": "simulation",
+  "warning": "Mechanics/cost accounting on a simulated BTD2-shaped menu graph with an oracle standing in for Jev. Counts are the engine\u0027s own bookkeeping. Latencies are a parameterised model; no Jev request, game, or agent was timed. Not a speed claim about real Jev or real BTD2.",
+  "goal": "Start a single-player match",
+  "normal_loop_counts": {
+    "inputs": 5,
+    "model_calls": 5,
+    "image_uploads": 5,
+    "verification_screenshots": 5
+  },
+  "flow_cold": {
+    "inputs": 5,
+    "jev_calls": 15,
+    "text_calls": 4,
+    "image_calls": 11,
+    "image_bytes_sent": 528000,
+    "verification_screenshots_to_a_model": 0,
+    "local_captures": 16,
+    "local_screen_confirmations": 0,
+    "learned_screens": 5,
+    "learned_transitions": 5,
+    "learned_boxes": 5,
+    "real_engine_overhead_ms_including_sim_waits": 247
+  },
+  "flow_warm_run_1": {
+    "inputs": 5,
+    "jev_calls": 5,
+    "text_calls": 5,
+    "image_calls": 0,
+    "image_bytes_sent": 0,
+    "verification_screenshots_to_a_model": 0,
+    "local_captures": 11,
+    "local_screen_confirmations": 6,
+    "learned_screens": 0,
+    "learned_transitions": 0,
+    "learned_boxes": 0,
+    "real_engine_overhead_ms_including_sim_waits": 65
+  },
+  "flow_warm_run_2": {
+    "inputs": 5,
+    "jev_calls": 5,
+    "text_calls": 5,
+    "image_calls": 0,
+    "image_bytes_sent": 0,
+    "verification_screenshots_to_a_model": 0,
+    "local_captures": 11,
+    "local_screen_confirmations": 6,
+    "learned_screens": 0,
+    "learned_transitions": 0,
+    "learned_boxes": 0,
+    "real_engine_overhead_ms_including_sim_waits": 22
+  },
+  "modelled_latency_scenarios": [
+    {
+      "jev_latency_model": "assumed_text_0.4s_image_1.3s",
+      "normal_agent_seconds_per_step": 5,
+      "normal_loop_s": 25,
+      "flow_cold_s": 15.9,
+      "flow_warm_s": 2
+    },
+    {
+      "jev_latency_model": "assumed_text_0.4s_image_1.3s",
+      "normal_agent_seconds_per_step": 15,
+      "normal_loop_s": 75,
+      "flow_cold_s": 15.9,
+      "flow_warm_s": 2
+    },
+    {
+      "jev_latency_model": "assumed_text_0.4s_image_1.3s",
+      "normal_agent_seconds_per_step": 49,
+      "normal_loop_s": 245,
+      "flow_cold_s": 15.9,
+      "flow_warm_s": 2
+    },
+    {
+      "jev_latency_model": "slower_text_1.0s_image_2.5s",
+      "normal_agent_seconds_per_step": 5,
+      "normal_loop_s": 25,
+      "flow_cold_s": 31.5,
+      "flow_warm_s": 5
+    },
+    {
+      "jev_latency_model": "slower_text_1.0s_image_2.5s",
+      "normal_agent_seconds_per_step": 15,
+      "normal_loop_s": 75,
+      "flow_cold_s": 31.5,
+      "flow_warm_s": 5
+    },
+    {
+      "jev_latency_model": "slower_text_1.0s_image_2.5s",
+      "normal_agent_seconds_per_step": 49,
+      "normal_loop_s": 245,
+      "flow_cold_s": 31.5,
+      "flow_warm_s": 5
+    }
+  ],
+  "latency_assumptions": {
+    "jev_image_with_box_s_basis": "1.273 s live BTD2 Hero Challenge decision (docs/experimental-game-jev.md); scenario 2 is a pessimistic 2.5 s",
+    "jev_text_only_s_basis": "no measurement exists; assumed",
+    "normal_agent_step_s_basis": "scenario values; the documented host-agent surrogate took ~49 s for a different 16-card localization task and is not a per-step measurement"
+  }
+}

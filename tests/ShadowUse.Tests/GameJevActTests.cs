@@ -230,6 +230,14 @@ public sealed class GameJevActTests
     [Theory]
     [InlineData("not-json", false)]
     [InlineData("[{\"id\":\"escape-chord\",\"kind\":\"key_tap\",\"description\":\"Escape chord\",\"key\":\"ctrl+shift+esc\"}]", false)]
+    [InlineData("[{\"id\":\"alt-f4\",\"kind\":\"key_tap\",\"description\":\"Close window\",\"key\":\"Alt+F4\"}]", false)]
+    [InlineData("[{\"id\":\"alt-f4\",\"kind\":\"key_tap\",\"description\":\"Close window\",\"key\":\"Alt+F4\"}]", true)]
+    [InlineData("[{\"id\":\"ctrl-w\",\"kind\":\"key_tap\",\"description\":\"Close tab\",\"key\":\"Ctrl+W\"}]", true)]
+    [InlineData("[{\"id\":\"ctrl-w\",\"kind\":\"key_tap\",\"description\":\"Close tab\",\"key\":\"ctrl+w\"}]", false)]
+    [InlineData("[{\"id\":\"f4\",\"kind\":\"key_tap\",\"description\":\"Function key\",\"key\":\"f4\"}]", true)]
+    [InlineData("[{\"id\":\"win\",\"kind\":\"key_tap\",\"description\":\"Windows key\",\"key\":\"win\"}]", true)]
+    [InlineData("[{\"id\":\"two\",\"kind\":\"key_tap\",\"description\":\"Two letters\",\"key\":\"ww\"}]", true)]
+    [InlineData("[{\"id\":\"mod\",\"kind\":\"key_tap\",\"description\":\"Bare modifier\",\"key\":\"shift\"}]", true)]
     [InlineData("[{\"id\":\"start\",\"kind\":\"click\",\"description\":\"Start\",\"target_description\":\"Start Solo button\"}]", true)]
     public async Task InvalidOptionsAreRefusedBeforeCaptureAndDispatch(string options, bool execute)
     {
@@ -374,6 +382,50 @@ public sealed class GameJevActTests
             Assert.Equal("space", dispatcher.Key);
         }
         finally { Environment.SetEnvironmentVariable(keyVariable, null); }
+    }
+
+    [Theory]
+    [InlineData("W", "w")]
+    [InlineData("e", "e")]
+    [InlineData("R", "r")]
+    public async Task SingleUnmodifiedLetterHotkeysAreAcceptedImageFreeAndNormalizedToLowercase(string configured, string dispatched)
+    {
+        string options = $$"""[{"id":"select_tower_1","kind":"key_tap","description":"Select tower 1 (Dart Monkey)","key":"{{configured}}"}]""";
+        var (tools, handler, frames, dispatcher, keyVariable) = Create(KeyChoiceResponse(1));
+        try
+        {
+            CallToolResult result = await tools.GameJevAct(null!, "BTD2", "select the dart monkey", options, execute: true);
+            Assert.False(result.IsError, Assert.IsType<TextContentBlock>(result.Content[0]).Text);
+            Assert.Equal(dispatched, dispatcher.Key);
+            Assert.Equal(1, dispatcher.Calls);
+            Assert.Single(handler.Requests);
+            Assert.DoesNotContain("data_base64", handler.Requests[0]);   // key-only decisions never attach an image
+        }
+        finally { Environment.SetEnvironmentVariable(keyVariable, null); }
+    }
+
+    [Fact]
+    public async Task WerKeyMenuPreviewsWithKnownStateAndSendsNoInput()
+    {
+        string options = """[{"id":"select_tower_1","kind":"key_tap","description":"Select tower 1","key":"W"},{"id":"select_tower_2","kind":"key_tap","description":"Select tower 2","key":"E"},{"id":"select_tower_3","kind":"key_tap","description":"Select tower 3","key":"R"}]""";
+        var (tools, handler, frames, dispatcher, keyVariable) = Create(KeyChoiceResponse(3));
+        try
+        {
+            CallToolResult result = await tools.GameJevAct(null!, "BTD2", "select a tower", options, execute: false, current_state: "Single-player match, round 1, tower shop visible");
+            Assert.False(result.IsError, Assert.IsType<TextContentBlock>(result.Content[0]).Text);
+            Assert.Equal(0, dispatcher.Calls);
+            Assert.Equal("select_tower_1", JsonDocument.Parse(Assert.IsType<TextContentBlock>(result.Content[0]).Text).RootElement.GetProperty("selected_action_id").GetString());
+        }
+        finally { Environment.SetEnvironmentVariable(keyVariable, null); }
+    }
+
+    [Fact]
+    public void KeyPolicyAcceptsOnlySingleUnmodifiedKeys()
+    {
+        foreach (var ok in new[] { "w", "W", "e", "R", "z", "0", "9", "space", "enter", "escape", "tab", "up", "left" })
+            Assert.True(GameJevTools.TryNormalizeExperimentalKey(ok, out _), ok);
+        foreach (var bad in new[] { "alt+f4", "Alt+F4", "ctrl+w", "Ctrl+W", "ctrl+shift+esc", "win", "shift", "ctrl", "alt", "f4", "ww", "", "w+e", "lmb", "\u00e9" })
+            Assert.False(GameJevTools.TryNormalizeExperimentalKey(bad, out _), bad);
     }
 
     [Fact]

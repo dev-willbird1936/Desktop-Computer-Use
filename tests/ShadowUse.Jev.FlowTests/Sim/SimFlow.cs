@@ -16,6 +16,9 @@ public sealed class SimEnvironment(SimGame game) : IJevFlowEnvironment
     public Task<FlowDispatchResult> ClickAsync(FlowFrame frame, NormBox target, CancellationToken ct)
         => Task.FromResult(FailInput ? new FlowDispatchResult(false, "blocked") : new FlowDispatchResult(game.Click(target)));
 
+    public Task<FlowDispatchResult> MoveAsync(FlowFrame frame, NormBox target, CancellationToken ct)
+        => Task.FromResult(FailInput ? new FlowDispatchResult(false, "blocked") : new FlowDispatchResult(true));
+
     public Task<FlowDispatchResult> TapKeyAsync(FlowFrame frame, string key, CancellationToken ct)
         => Task.FromResult(FailInput ? new FlowDispatchResult(false, "blocked") : new FlowDispatchResult(game.Tap(key)));
 }

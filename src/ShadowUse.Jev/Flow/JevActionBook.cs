@@ -151,6 +151,7 @@ public sealed class JevActionBook
         lock (_gate)
         {
             if (!_screens.TryGetValue(screenId, out var screen)) throw new InvalidOperationException($"Unknown screen '{screenId}'.");
+            if (action.Source == "caller" && action.Box is not null) action.BoxVerified = true;
             var existing = screen.Actions.FirstOrDefault(a => a.Id == action.Id);
             if (existing is null)
             {
@@ -162,10 +163,16 @@ public sealed class JevActionBook
                 existing.Description = action.Description;
                 existing.TargetDescription = action.TargetDescription ?? existing.TargetDescription;
                 existing.Key = action.Key ?? existing.Key;
+                if (action.Kind == FlowActionKind.Place)
+                {
+                    existing.ApprovedRegion = action.ApprovedRegion;
+                    existing.PlacementCheck = action.PlacementCheck;
+                }
                 if (action.Box is { } box && (existing.Box is null || action.Source == "caller"))
                 {
                     existing.Box = box;
                     existing.BoxConfidence = action.BoxConfidence;
+                    existing.BoxVerified = action.Source == "caller";
                     existing.NoEffectStreak = 0;
                 }
             }
@@ -173,7 +180,8 @@ public sealed class JevActionBook
         }
     }
 
-    public void RecordBox(string screenId, string actionId, NormBox box, double confidence)
+    /// <summary>Saves a box as reusable. Call only after a click on it was followed by an observed screen change.</summary>
+    public void RecordVerifiedBox(string screenId, string actionId, NormBox box, double confidence)
     {
         lock (_gate)
         {
@@ -181,6 +189,7 @@ public sealed class JevActionBook
             if (action is null || !box.IsValid || box.Area > JevFlowGuard.MaxBoxArea) return;
             action.Box = box;
             action.BoxConfidence = confidence;
+            action.BoxVerified = true;
             action.Source = action.Source == "caller" ? "caller" : "learned";
             action.NoEffectStreak = 0;
         }
@@ -209,7 +218,7 @@ public sealed class JevActionBook
         }
     }
 
-    /// <summary>A click left the confirmed screen unchanged. After two in a row the learned box is dropped so Jev re-localizes it.</summary>
+    /// <summary>A click left the confirmed screen unchanged. After one confirmed no-effect click the learned box is dropped so Jev re-localizes it.</summary>
     public bool RecordNoEffect(string screenId, string actionId)
     {
         lock (_gate)
@@ -217,10 +226,11 @@ public sealed class JevActionBook
             var action = Find(screenId, actionId);
             if (action is null || action.Kind != FlowActionKind.Click) return false;
             action.NoEffectStreak++;
-            if (action.NoEffectStreak >= 2 && action.Box is not null && action.Source != "caller")
+            if (action.NoEffectStreak >= 1 && action.Box is not null && action.Source != "caller")
             {
                 action.Box = null;
                 action.BoxConfidence = 0;
+                action.BoxVerified = false;
                 action.NoEffectStreak = 0;
                 return true;
             }
@@ -228,11 +238,26 @@ public sealed class JevActionBook
         }
     }
 
+    public void SetDynamic(string screenId, bool dynamic)
+    {
+        lock (_gate)
+            if (_screens.TryGetValue(screenId, out var screen))
+            {
+                screen.Dynamic = dynamic;
+                if (dynamic) screen.Fingerprints.Clear();
+            }
+    }
+
+    public bool IsDynamic(string screenId)
+    {
+        lock (_gate) return _screens.TryGetValue(screenId, out var screen) && screen.Dynamic;
+    }
+
     public void AddFingerprint(string screenId, byte[] fingerprint)
     {
         lock (_gate)
         {
-            if (!_screens.TryGetValue(screenId, out var screen) || fingerprint.Length == 0) return;
+            if (!_screens.TryGetValue(screenId, out var screen) || screen.Dynamic || fingerprint.Length == 0) return;
             screen.Visits++;
             screen.LastSeenUtc = DateTimeOffset.UtcNow;
             // Skip near-duplicates; otherwise keep the freshest samples so slow drift (animation, time of day) is covered.
@@ -253,7 +278,7 @@ public sealed class JevActionBook
         lock (_gate)
         {
             var scored = _screens.Values
-                .Where(s => s.Id != GlobalScreenId && s.Fingerprints.Count > 0)
+                .Where(s => s.Id != GlobalScreenId && !s.Dynamic && s.Fingerprints.Count > 0)
                 .Select(s => (s.Id, Dist: s.Fingerprints.Min(f => Distance(f, fingerprint))))
                 .OrderBy(x => x.Dist)
                 .Take(2)
@@ -349,13 +374,13 @@ public sealed class JevActionBook
     private static FlowAction Clone(FlowAction a) => new()
     {
         Id = a.Id, Kind = a.Kind, Description = a.Description, TargetDescription = a.TargetDescription, Key = a.Key,
-        Box = a.Box, BoxConfidence = a.BoxConfidence, Source = a.Source, Uses = a.Uses, NoEffectStreak = a.NoEffectStreak,
+        Box = a.Box, BoxConfidence = a.BoxConfidence, BoxVerified = a.BoxVerified, ApprovedRegion = a.ApprovedRegion, PlacementCheck = a.PlacementCheck, Source = a.Source, Uses = a.Uses, NoEffectStreak = a.NoEffectStreak,
         Transitions = new Dictionary<string, int>(a.Transitions, StringComparer.Ordinal), LastUsedUtc = a.LastUsedUtc,
     };
 
     private static FlowScreen Clone(FlowScreen s) => new()
     {
-        Id = s.Id, Description = s.Description, Visits = s.Visits, LastSeenUtc = s.LastSeenUtc,
+        Id = s.Id, Description = s.Description, Visits = s.Visits, LastSeenUtc = s.LastSeenUtc, Dynamic = s.Dynamic,
         Actions = s.Actions.Select(Clone).ToList(), Fingerprints = s.Fingerprints.Select(f => f.ToArray()).ToList(),
     };
 

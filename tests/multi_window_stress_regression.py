@@ -87,7 +87,7 @@ class ConcurrentMcpClient:
         for destination in pending:
             destination.put(failure)
 
-    def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def call(self, method: str, params: dict[str, Any] | None = None, timeout: float = 20) -> dict[str, Any]:
         destination: queue.Queue[dict[str, Any] | BaseException] = queue.Queue(maxsize=1)
         with self._lock:
             request_id = self._next_id
@@ -100,7 +100,7 @@ class ConcurrentMcpClient:
             self.process.stdin.write(json.dumps(request) + "\n")
             self.process.stdin.flush()
         try:
-            response = destination.get(timeout=20)
+            response = destination.get(timeout=timeout)
         except queue.Empty as error:
             raise TimeoutError(f"MCP call timed out: {method}") from error
         finally:
@@ -119,8 +119,8 @@ class ConcurrentMcpClient:
             self.process.stdin.write(json.dumps(request) + "\n")
             self.process.stdin.flush()
 
-    def tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
-        response = self.call("tools/call", {"name": name, "arguments": arguments or {}})
+    def tool(self, name: str, arguments: dict[str, Any] | None = None, timeout: float = 20) -> dict[str, Any]:
+        response = self.call("tools/call", {"name": name, "arguments": arguments or {}}, timeout=timeout)
         if "error" in response:
             return {"error": response["error"]}
         content = response.get("result", {}).get("content", [])

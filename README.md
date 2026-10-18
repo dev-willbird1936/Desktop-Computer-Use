@@ -203,6 +203,10 @@ Quick picks:
 | `JevModel` | `"jev-latest"` | Model name sent with each Jev request. |
 | `JevBaseUrl` | `https://api.typesafe.ai/v1/systemone` | Jev endpoint. The API key is read from `TYPESAFE_API_KEY`, never stored. |
 | `JevTimeoutMs` | `8000` | Per-call Jev timeout, 1000-60000. |
+| `EnableExperimentalGameJevFlow` | `false` | Experimental responsive Jev game loop (`game_jev_flow`): learned screens/inputs, text-only decisions on known screens, no per-step verification screenshot. Also needs `GameMode`, `JevMode: "fast_loop"`, `DecisionBackend: "jev"`, a Box-capable `JevModel` and `TYPESAFE_API_KEY`. See [docs/jev-flow.md](docs/jev-flow.md). Turn off to use only normal DCU game tools. |
+| `JevFlowSyncEvery` | `4` | Steps `game_jev_flow` may rely on a predicted screen before an image sync, 1-20. |
+| `JevFlowFingerprintTolerance` | `0.06` | Fingerprint distance under which a live frame counts as a saved screen, 0.01-0.3. |
+| `JevFlowDiscovery` | `"combined"` | How unknown screens are mapped: `off`, `edge` or `combined` (edge + OCR labels). |
 | `InputBackendMode` | `"SendInput"` | Injection path, used only when `GameMode` is on. `SendInput` (default, works everywhere), `KernelDriver`, `HardwareDevice`, `MemoryWrite`, or `Auto`. Independent of `HumanizedInput`, which controls timing. |
 | `KernelDriverKind` | `"Interception"` | Driver for `KernelDriver`: `Interception` or `WdfHidMinidriver`. |
 | `HardwareComPort` | unset | Serial port for `HardwareDevice`, e.g. `COM3`. |

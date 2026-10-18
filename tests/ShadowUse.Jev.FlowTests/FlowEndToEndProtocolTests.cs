@@ -77,7 +77,7 @@ public sealed class FlowEndToEndProtocolTests : IDisposable
     public async Task ColdThenWarmRunsThroughTheRealControllerAndHttp()
     {
         string bookPath = Path.Combine(_dir, "book.json");
-        var options = new JevFlowOptions { SettleMs = 5, MaxSettleMs = 250, PollMs = 5 };
+        var options = new JevFlowOptions { SettleMs = 5, MaxSettleMs = 250, FirstSettleMs = 60, PollMs = 5, MaxActions = 8 };
         JevController Controller(FakeJev handler) => new(new HttpClient(handler),
             new JevOptions { Mode = JevMode.FastLoop, Model = "jev-1.14.0", ApiKeyEnvironmentVariable = KeyVar, MaxRetries = 0 });
 
